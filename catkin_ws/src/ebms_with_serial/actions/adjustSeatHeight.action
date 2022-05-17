@@ -1,0 +1,10 @@
+# Goal definition.
+# Specifies the height to which the seat should be lifted/lowered in millimeters.
+# Seat can be moved from 0cm to 150mm max. That's why we use uint8.
+uint8 wantedHeight
+---
+# Result definition, returns the current height of the seat.
+uint8 finalHeight
+---
+# Feedback definition, returns the current height of the seat.
+uint8 currentHeight

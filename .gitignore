@@ -1,0 +1,7 @@
+# ignore these folders, because they are built automatically by catkin_make.
+build/
+devel/
+install/
+
+# ignore these folders, because they are added automatically by Visual Studio Code.
+.vscode/
