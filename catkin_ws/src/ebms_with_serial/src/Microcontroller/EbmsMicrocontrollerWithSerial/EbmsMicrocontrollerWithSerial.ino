@@ -8,6 +8,8 @@
 #define STALL_TIME 5000 // In theory this should be 26ms but in reality the time it takes to move the actuator with 1mm is ~135ms.
 #define STALLED_CODE 255
 #define ACTUATOR_STOP_TIME 100
+#define READ_FROM_ROS_TOPIC "newSeatHeight"
+#define SEND_TO_ROS_TOPIC "currentSeatHeight"
 
 ros::NodeHandle  nh;
 
@@ -24,11 +26,11 @@ void messageCb( const std_msgs::String& wantedHeight){
   else if (currentHeight > goalHeight) lowerTheActuator(currentHeight, goalHeight, 0);
 }
 
-ros::Subscriber<std_msgs::String> rosCommandsTopic("changeHeight", &messageCb );
+ros::Subscriber<std_msgs::String> rosCommandsTopic(READ_FROM_ROS_TOPIC, &messageCb );
 
 // setup ros publisher. The arduino sends feedback to ROS by publishing it to the "arduinoFeedback" topic.
 std_msgs::String feedbackMsg;
-ros::Publisher feebackTopic("arduinoFeedback", &feedbackMsg);
+ros::Publisher feebackTopic(SEND_TO_ROS_TOPIC, &feedbackMsg);
 
 
 
@@ -107,10 +109,14 @@ byte getCurrentHeight() {
  * TODO implement feedback messages with more detailed status such as:
  *  - stalled, timeout, resting, etc.
  *  
+ *  -------------------------------------------------------------------------------------------------
+ *  TODO find a way to combine raiseTheActuator and lowerTheActuator because it is waising memory
+ *  and it is annoying AND bad practice to Copy/Paste the same changes from one function to another.
+ *  -------------------------------------------------------------------------------------------------
  */
 void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapsedWorkTime) {
   
-  nh.loginfo("----Raise----");
+  nh.loginfo("Raising...");
 
   byte currentHeightPreviousValue = currentHeight; // this is in millimeters from 0 to 150
   unsigned long availableWorkTime = MAX_WORK_TIME - elapsedWorkTime; // Calculate the available work time the actuator has left.
@@ -127,10 +133,9 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
     if (millis() > stallTimer) {
       stopTheActuator();
       sendFeedback(STALLED_CODE); //This feedback message will abort the ROS action.
-      char logErrMsg1[] = "Actuator has stalled at: ";
-      char currentHeightStr[2];
-      itoa(getCurrentHeight(), currentHeightStr, 10);
-      nh.logerror(strcat(logErrMsg1, currentHeightStr));
+      // -----------------------------------------------------------------------
+      // TODO maybe notify the Action Server of the final position before stall.
+      // -----------------------------------------------------------------------
       break;
     }
 
@@ -141,7 +146,9 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
     if (currentHeight > currentHeightPreviousValue && currentHeight < goalHeight) {
       sendFeedback(currentHeight);
       currentHeightPreviousValue = currentHeight;
-      stallTimer = millis() + STALL_TIME;
+
+      // Everytime the current height has changed, reset the stall timer.
+      stallTimer = millis() + STALL_TIME; 
     }
 
     // without this delay the function doesn't work.
@@ -163,22 +170,17 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
   }
   else if(currentHeight == goalHeight){
     sendFeedback(currentHeight);
-
-    char currentHeightStr[2];
-    itoa(currentHeight, currentHeightStr, 10);
-    char logInfoMsg1[] = "Success! Final position is: ";
-    nh.loginfo(strcat(logInfoMsg1, currentHeightStr));
-    
-    nh.loginfo("Resting...");
     restTheActuator(workTime);
   }
   else {
-    char currentHeightStr[2];
-    itoa(currentHeight, currentHeightStr, 10);
-    char logErrMsg2[] = "Failed! Final position is: ";
-    nh.logerror(strcat(logErrMsg2, currentHeightStr));
-    
-    nh.loginfo("Resting...");
+    /** 
+     * TODO when the actuator has stalled all we do is rest and then accept new goals.
+     * Maybe we need a better strategy? Try to un-stall the actuator by moving up/down 
+     * or maybe just deny all incomming requests until a human has fixed the actuator
+     * and restarted the microcontroller.
+     * 
+     * Maybe notify the Action Server of the final position before it stalled?
+    */
     restTheActuator(workTime);
   }
 }
@@ -219,10 +221,16 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
  *  
  * TODO implement feedback messages with more detailed status such as:
  *  - stalled, timeout, resting, etc.
+ *  
+ *  -------------------------------------------------------------------------------------------------
+ *  TODO find a way to combine raiseTheActuator and lowerTheActuator because it is waising memory
+ *  and it is annoying AND bad practice to Copy/Paste the same changes from one function to another.
+ *  -------------------------------------------------------------------------------------------------
+ *  
  */
 void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapsedWorkTime) {
   
-  nh.loginfo("----Lower----");
+  nh.loginfo("Lowering...");
   
   byte currentHeightPreviousValue = currentHeight; // this is in millimeters from 0 to 150
   unsigned long availableWorkTime = MAX_WORK_TIME - elapsedWorkTime; // Calculate the available work time the actuator has left.
@@ -239,10 +247,6 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
     if (millis() > stallTimer) {
       stopTheActuator();
       sendFeedback(STALLED_CODE); //This feedback message will abort the ROS action.
-      char logErrMsg1[] = "Actuator has stalled at: ";
-      char currentHeightStr[2];
-      itoa(getCurrentHeight(), currentHeightStr, 10);
-      nh.logerror(strcat(logErrMsg1, currentHeightStr));
       break;
     }
 
@@ -253,6 +257,8 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
     if (currentHeight < currentHeightPreviousValue &&  currentHeight > goalHeight) {
       sendFeedback(currentHeight);
       currentHeightPreviousValue = currentHeight;
+
+      // Everytime the current height has changed, reset the stall timer.
       stallTimer = millis() + STALL_TIME;
     }
 
@@ -276,22 +282,9 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
   }
   else if(currentHeight == goalHeight){
     sendFeedback(currentHeight);
-
-    char currentHeightStr[2];
-    itoa(currentHeight, currentHeightStr, 10);
-    char logInfoMsg1[] = "Success! Final position is: ";
-    nh.loginfo(strcat(logInfoMsg1, currentHeightStr));
-    
-    nh.loginfo("Resting...");
     restTheActuator(workTime);
   }
   else {
-    char currentHeightStr[2];
-    itoa(currentHeight, currentHeightStr, 10);
-    char logErrMsg2[] = "Failed! Final position is: ";
-    nh.logerror(strcat(logErrMsg2, currentHeightStr));
-    
-    nh.loginfo("Resting...");
     restTheActuator(workTime);
   }
 }
@@ -318,16 +311,31 @@ void stopTheActuator() {
  *      Next version of this function should also return the time left to rest
  * 
  * TODO send feedback to ROS when resting is complete.
+ * 
+ * TODO send the time it will take to rest to the ROS Action Server so it can
+ * notify the Client.
+ * 
+ * TODo log time left for resting on every spin
+ * 
+ * TODO new goals should be able to interrupt this resting period if the
+ * duty cycle of the actuator allows for that to happen. For example 3 seconds
+ * of work require 12 seconds of rest which is very annoying if you only want
+ * to move the seat one last time for another few seconds.
+ * We need to calculate how long the worst case scenario will take and
+ * determine weather the actuator can move there without burning out.
  */
 void restTheActuator(unsigned long workTime) {
-  
+
+  nh.loginfo("Resting...");
   unsigned long restTime = 4 * workTime;
+
   unsigned long startTime = millis();
   while(millis() < startTime + restTime) {
     nh.spinOnce();
     delay(1);
   }
-  nh.loginfo("Resting complete.");
+  
+  nh.loginfo("Ready");
 }
 
 /**
@@ -335,8 +343,8 @@ void restTheActuator(unsigned long workTime) {
  */
 void sendFeedback(byte currentHeight) {
   
-  char feedbackValue[8];
-  itoa (currentHeight, feedbackValue, 10); // convert int to string and save it into char*
-  feedbackMsg.data = feedbackValue; // save the char* value inside the std_msgs::String data parameter
+  char currentHeightToStr[2]; // byte [0] is the current height, byte [1] is the Null-Terminator '\n'
+  itoa (currentHeight, currentHeightToStr, 10); // convert int to string and save it into char*
+  feedbackMsg.data = currentHeightToStr; // save the char* value inside the std_msgs::String data parameter
   feebackTopic.publish(&feedbackMsg);
 }

@@ -13,7 +13,7 @@ void doneCb(const actionlib::SimpleClientGoalState &state, const ebms_with_seria
         ROS_INFO("Final feedback result: %dmm", result->finalHeight);
     }
     else {
-        ROS_INFO("Task failed.");
+        ROS_INFO("Task failed. Goal state is: %s", state.toString().c_str());
     }
 }
 
@@ -37,15 +37,21 @@ void sendGoalOnButtonPressed(bool btnPressed, u_int8_t btnHeight, const boost::s
         actionClientPtr->sendGoal(goal, &doneCb, &activeCb, &feedbackCb);
 
         //wait for the action to return
-        bool finished_before_timeout = actionClientPtr->waitForResult(ros::Duration(30.0));
+        bool finished_before_timeout = actionClientPtr->waitForResult(ros::Duration(10.0));
 
         if (finished_before_timeout)
         {
-        actionlib::SimpleClientGoalState state = actionClientPtr->getState();
-        ROS_INFO("Action finished: %s",state.toString().c_str());
+            actionlib::SimpleClientGoalState state = actionClientPtr->getState();
+            ROS_INFO("Action finished: %s",state.toString().c_str());
         }
-        else
-        ROS_INFO("Action did not finish before the time out.");
+        // TODO what happens if we receive the goal height feedback message after timeout?
+        // Maybe set state here to FAILED or try to pass the goalId with the goal
+        // in order to receive feedback messages with the same ID.
+        else {
+            ROS_INFO("Action did not finish before the time out. Cancelling...");
+            actionClientPtr->cancelGoal();
+        }
+        
     }
 }
 
