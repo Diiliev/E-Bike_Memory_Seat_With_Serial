@@ -7,4 +7,4 @@ uint8 wantedHeight
 uint8 finalHeight
 ---
 # Feedback definition, returns the current height of the seat.
-uint8 currentHeight
+uint8 currentValue

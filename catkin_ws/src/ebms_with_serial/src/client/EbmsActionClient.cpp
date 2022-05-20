@@ -18,7 +18,7 @@ typedef actionlib::SimpleActionClient<ebms_with_serial::adjustSeatHeightAction> 
 // Callback that gets called on transitions to Done
 void doneCb(const actionlib::SimpleClientGoalState &state, const ebms_with_serial::adjustSeatHeightResultConstPtr &result) {
     if (state.state_ == state.SUCCEEDED) {
-        ROS_INFO("Final feedback result: %dmm", result->finalHeight);
+        ROS_INFO("Final seat height is: %dmm", result->finalHeight);
     }
     else {
         ROS_INFO("Task failed. Goal state is: %s", state.toString().c_str());
@@ -32,7 +32,7 @@ void activeCb() {
 
 // Callback that gets called whenever feedback for this goal is received
 void feedbackCb(const ebms_with_serial::adjustSeatHeightFeedbackConstPtr &feedback) {
-    ROS_INFO("Current height is: %dmm", feedback->currentHeight);
+    ROS_INFO("Current height is: %dmm", feedback->currentValue);
 }
 
 

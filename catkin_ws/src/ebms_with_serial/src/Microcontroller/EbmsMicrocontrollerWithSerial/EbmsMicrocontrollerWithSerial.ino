@@ -182,6 +182,7 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
   }
   else if(currentHeight == goalHeight){
     sendFeedback(currentHeight);
+    nh.loginfo("Done!");
     restTheActuator(workTime);
   }
   else {
@@ -298,6 +299,7 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
   }
   else if(currentHeight == goalHeight){
     sendFeedback(currentHeight);
+    nh.loginfo("Done!");
     restTheActuator(workTime);
   }
   else {

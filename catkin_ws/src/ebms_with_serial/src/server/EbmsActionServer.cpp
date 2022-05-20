@@ -85,8 +85,8 @@ class SeatHeightAdjuster {
         while (currentSeatHeight != goal->wantedHeight) {
 
             if (actionServer.isPreemptRequested() || !ros::ok()) {
-                if (feedback.currentHeight <= MAX_SEAT_HEIGHT) {
-                    currentSeatHeight = feedback.currentHeight;
+                if (feedback.currentValue <= MAX_SEAT_HEIGHT) {
+                    currentSeatHeight = feedback.currentValue;
                     actionServer.publishFeedback(feedback);
                 }
 
@@ -97,15 +97,11 @@ class SeatHeightAdjuster {
                 return;
             }
 
-            // ------------------------------------------------------------
-            // TODO rename feedback.currentHeight to feedback.currentValue
-            // because currentValue can either be a seat height or a status code
-            // ------------------------------------------------------------
-            if (feedback.currentHeight > MAX_SEAT_HEIGHT) {
-                switch (feedback.currentHeight){
+            if (feedback.currentValue > MAX_SEAT_HEIGHT) {
+                switch (feedback.currentValue){
                     case STALLED_CODE : {
                         // reset the currentHeight to the last stored seat height and notify the client.
-                        feedback.currentHeight = currentSeatHeight;
+                        feedback.currentValue = currentSeatHeight;
                         actionServer.publishFeedback(feedback);
 
                         result.finalHeight = currentSeatHeight;
@@ -116,7 +112,7 @@ class SeatHeightAdjuster {
                 }
             }
 
-            currentSeatHeight = feedback.currentHeight;
+            currentSeatHeight = feedback.currentValue;
             ROS_INFO("The current seat height is %dmm", currentSeatHeight);
             actionServer.publishFeedback(feedback);
             rate.sleep();
@@ -150,7 +146,7 @@ class SeatHeightAdjuster {
     void onSeatFeedback(const std_msgs::String::ConstPtr& msg) {
 
         // TODO ignore messages received when action state is not active
-        feedback.currentHeight = atoi(msg->data.c_str());
+        feedback.currentValue = atoi(msg->data.c_str());
     }
 };
 
