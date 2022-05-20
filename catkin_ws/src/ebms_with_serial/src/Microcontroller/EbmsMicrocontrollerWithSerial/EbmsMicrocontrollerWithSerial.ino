@@ -18,11 +18,9 @@ ros::NodeHandle  nh;
 void messageCb( const std_msgs::String& wantedHeight){
   byte goalHeight = atoi(wantedHeight.data); 
   byte currentHeight = getCurrentHeight();
+  sendFeedback(currentHeight);
 
-  if (currentHeight == goalHeight) {
-    stopTheActuator();
-    sendFeedback(currentHeight);
-  }
+  if (currentHeight == goalHeight) stopTheActuator();
   else if (currentHeight < goalHeight) raiseTheActuator(currentHeight, goalHeight, 0);
   else if (currentHeight > goalHeight) lowerTheActuator(currentHeight, goalHeight, 0);
 }
