@@ -4,6 +4,14 @@
 #include <ebms_with_serial/adjustSeatHeightAction.h>
 #include <std_msgs/Bool.h>
 
+/*  If it takes ~135ms to move the actuator 1mm, then in the worst case scenario
+    which is to travel from 0mm to 150mm a distance of 150mm, it will take the
+    actuator 20.25s to finish the task. We have rounded this number to compensate for
+    different actuator speeds depending on the load on the actuator, overshoot protection
+    and communication delays. No seat adjustment action should take more than 30s.
+*/
+#define ACTION_TIMER 30.0
+
 typedef actionlib::SimpleActionClient<ebms_with_serial::adjustSeatHeightAction> Client;
 
 // thanks to https://programmer.group/ros-communication-mechanism-action-and-action-file.html
@@ -37,7 +45,7 @@ void sendGoalOnButtonPressed(bool btnPressed, u_int8_t btnHeight, const boost::s
         actionClientPtr->sendGoal(goal, &doneCb, &activeCb, &feedbackCb);
 
         //wait for the action to return
-        bool finished_before_timeout = actionClientPtr->waitForResult(ros::Duration(10.0));
+        bool finished_before_timeout = actionClientPtr->waitForResult(ros::Duration(ACTION_TIMER));
 
         if (finished_before_timeout)
         {
@@ -47,6 +55,11 @@ void sendGoalOnButtonPressed(bool btnPressed, u_int8_t btnHeight, const boost::s
         // TODO what happens if we receive the goal height feedback message after timeout?
         // Maybe set state here to FAILED or try to pass the goalId with the goal
         // in order to receive feedback messages with the same ID.
+        /*
+            ------------------------------------------------------------------------------
+            TODO how do we notify the microcontroller that the action has been cancelled?
+            ------------------------------------------------------------------------------
+        */
         else {
             ROS_INFO("Action did not finish before the time out. Cancelling...");
             actionClientPtr->cancelGoal();

@@ -10,6 +10,7 @@
 #define ACTUATOR_STOP_TIME 100
 #define READ_FROM_ROS_TOPIC "newSeatHeight"
 #define SEND_TO_ROS_TOPIC "currentSeatHeight"
+#define HEIGHT_MAX_DIGITS 3
 
 ros::NodeHandle  nh;
 
@@ -50,7 +51,14 @@ void setup() {
 
 
 void loop() {
-  
+
+  /** We spin the node handler to: 
+   *  - Receive new messages on the subscribed topic
+   *  - Send messages in the queue of the published topic
+   *  - Keep synchronized with rosserial. If 15 seconds go by
+   *    without calling spinOnce(), we get the following
+   *    error message: "Lost sync with device, restarting..."
+   */
   nh.spinOnce();
   delay(1);
 }
@@ -133,6 +141,7 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
     if (millis() > stallTimer) {
       stopTheActuator();
       sendFeedback(STALLED_CODE); //This feedback message will abort the ROS action.
+      nh.logwarn("Stalled!");
       // -----------------------------------------------------------------------
       // TODO maybe notify the Action Server of the final position before stall.
       // -----------------------------------------------------------------------
@@ -151,8 +160,11 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
       stallTimer = millis() + STALL_TIME; 
     }
 
+    // we spin the node handler to ensure we don't lose synch with rosserial.
+    nh.spinOnce();
+    
     // without this delay the function doesn't work.
-    // I suspect the loop spins too fast for for the microcontroller to handle.
+    // I suspect the while loop spins too fast for for the microcontroller to handle.
     delay(10);
   }
 
@@ -247,6 +259,7 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
     if (millis() > stallTimer) {
       stopTheActuator();
       sendFeedback(STALLED_CODE); //This feedback message will abort the ROS action.
+      nh.logwarn("Stalled!");
       break;
     }
 
@@ -261,6 +274,9 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
       // Everytime the current height has changed, reset the stall timer.
       stallTimer = millis() + STALL_TIME;
     }
+
+    // we spin the node handler to ensure we don't lose synch with rosserial.
+    nh.spinOnce();
 
     // without this delay the function doesn't work.
     // I suspect the loop spins too fast for for the microcontroller to handle.
@@ -340,10 +356,18 @@ void restTheActuator(unsigned long workTime) {
 
 /**
  * Send feedback to the ROS on board computer.
+ * 
+ *  One char is used for every digit of the number
+ *  and one char is added for the null terminator
+ *  
+ *  byte [0] stores the digit for the hundreds
+ *  byte [1] stores the digit for the tens
+ *  byte [2] stores the digit for the units
+ *  byte [3] stores the Null-Terminator '\0'
  */
 void sendFeedback(byte currentHeight) {
-  
-  char currentHeightToStr[2]; // byte [0] is the current height, byte [1] is the Null-Terminator '\n'
+
+  char currentHeightToStr[HEIGHT_MAX_DIGITS + sizeof(char)]; 
   itoa (currentHeight, currentHeightToStr, 10); // convert int to string and save it into char*
   feedbackMsg.data = currentHeightToStr; // save the char* value inside the std_msgs::String data parameter
   feebackTopic.publish(&feedbackMsg);

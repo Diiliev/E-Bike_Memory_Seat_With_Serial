@@ -15,6 +15,9 @@
 #define SEND_TO_ARDUINO "newSeatHeight"
 #define READ_FROM_ARDUINO "currentSeatHeight"
 
+#define MAX_SEAT_HEIGHT 150
+#define DIGITS_OF_MAX_SEAT_HEIGHT 3
+
 class SeatHeightAdjuster {
 
     protected:
@@ -24,6 +27,9 @@ class SeatHeightAdjuster {
     ros::Publisher seatHeightPub;
     ros::Subscriber seatHeightSub;
     ebms_with_serial::adjustSeatHeightFeedback feedback;
+    // since feedback carries not only the current seat height but also status codes like STALLED_CODE,
+    // this variable is needed to store the current seat height value.
+    u_int8_t currentSeatHeight = 0; 
     ebms_with_serial::adjustSeatHeightResult result;
 
     public:
@@ -41,7 +47,7 @@ class SeatHeightAdjuster {
     void executeCB(const ebms_with_serial::adjustSeatHeightGoalConstPtr &goal) {
         ros::Rate rate(10);
 
-        ROS_INFO("Executing %s, wanted height is %i",
+        ROS_INFO("Executing %s, wanted height is %imm",
             actionName.c_str(),
             goal->wantedHeight
         );
@@ -64,40 +70,78 @@ class SeatHeightAdjuster {
         // -------------------------------------------------
         // TODO notify the arduino when the goal has been cancelled.
         // -------------------------------------------------
-        while (feedback.currentHeight != goal->wantedHeight) {
+        // TODO what if scenario:
+        /*
+            1. currentHeight != goal
+            2. publish goal.wantedHeight
+            3. currentHeight == goal
+            4. rest
+            5. change seat height manually
+            6. publish the same goal.wantedHeight as before
+            Question: do we read that the last feedback message is the same as the new goal so there is no need to move
+            or do we get the latest result from the arduino and see that the seat has been manually moved and 
+            execute properly?
+        */
+        while (currentSeatHeight != goal->wantedHeight) {
 
             if (actionServer.isPreemptRequested() || !ros::ok()) {
-                result.finalHeight = PREEMPTED_CODE;
+                if (feedback.currentHeight <= MAX_SEAT_HEIGHT) {
+                    currentSeatHeight = feedback.currentHeight;
+                    actionServer.publishFeedback(feedback);
+                }
+
+                result.finalHeight = currentSeatHeight;
                 actionServer.setPreempted(result, "Action was cancelled or preempted.");
-                ROS_INFO("Action was cancelled or preempted.");
-                break;
+                ROS_INFO("Action was cancelled or preempted. Final seat height: %dmm", result.finalHeight);
+
+                return;
             }
 
-            if (feedback.currentHeight == STALLED_CODE) {
-                result.finalHeight = feedback.currentHeight;
-                actionServer.setAborted(result, "Actuator has stalled.");
-                ROS_ERROR("The actuator has stalled!");
-                break;
+            // ------------------------------------------------------------
+            // TODO rename feedback.currentHeight to feedback.currentValue
+            // because currentValue can either be a seat height or a status code
+            // ------------------------------------------------------------
+            if (feedback.currentHeight > MAX_SEAT_HEIGHT) {
+                switch (feedback.currentHeight){
+                    case STALLED_CODE : {
+                        // reset the currentHeight to the last stored seat height and notify the client.
+                        feedback.currentHeight = currentSeatHeight;
+                        actionServer.publishFeedback(feedback);
+
+                        result.finalHeight = currentSeatHeight;
+                        actionServer.setAborted(result, "Actuator has stalled.");
+                        ROS_ERROR("The actuator has stalled!");
+                        return;
+                    }
+                }
             }
 
-            ROS_INFO("The current seat height is %dmm", feedback.currentHeight);
+            currentSeatHeight = feedback.currentHeight;
+            ROS_INFO("The current seat height is %dmm", currentSeatHeight);
+            actionServer.publishFeedback(feedback);
             rate.sleep();
         }
 
-        // if the currentHeight is equal to goal->wantedHeight then setSecceeded
-        result.finalHeight = feedback.currentHeight;
-        actionServer.setSucceeded(result, "Success");  
-        ROS_INFO("%s Succeeded :) the final height is: %dmm", actionName.c_str(), result.finalHeight); 
+        if (currentSeatHeight == goal->wantedHeight) {
+            result.finalHeight = currentSeatHeight;
+            actionServer.setSucceeded(result, "Success");  
+            ROS_INFO("%s Succeeded :) the final height is: %dmm", actionName.c_str(), result.finalHeight); 
+            return;
+        }
+        
+        result.finalHeight = currentSeatHeight;
+        actionServer.setAborted(result, "Failed");  
+        ROS_INFO("%s Failed. The final height is: %dmm", actionName.c_str(), result.finalHeight);
     }
 
     // publish the new wanted height to the arduino topic
     void publishNewHeight(uint8_t goalHeight) {
         std_msgs::String goalMsg;
-        std::stringstream goalHeightToStr;
-        
+        char goalHeightToStr[DIGITS_OF_MAX_SEAT_HEIGHT + sizeof(char)];
+
         // convert int to string
-        goalHeightToStr << goalHeight;
-        goalMsg.data = goalHeightToStr.str();
+        std::sprintf(goalHeightToStr, "%d", goalHeight);
+        goalMsg.data = goalHeightToStr;
 
         seatHeightPub.publish(goalMsg);
     }
@@ -107,7 +151,6 @@ class SeatHeightAdjuster {
 
         // TODO ignore messages received when action state is not active
         feedback.currentHeight = atoi(msg->data.c_str());
-        actionServer.publishFeedback(feedback);
     }
 };
 
