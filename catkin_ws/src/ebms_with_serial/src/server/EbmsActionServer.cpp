@@ -115,6 +115,8 @@ class SeatHeightAdjuster {
                 result.finalHeight = currentSeatHeight;
                 currentSeatHeight = INITIAL_SEAT_HEIGHT;
                 actionServer.setPreempted(result, "Action was cancelled or preempted.");
+                // TODO this will print INITIAL_SEAT_HEIGHT if the microcontroller doesn't send
+                // feedback of the current height and the timeout preempt is called from the Action Client. 
                 ROS_INFO("Action was cancelled or preempted. Final seat height: %dmm", result.finalHeight);
 
                 return;
@@ -191,8 +193,6 @@ class SeatHeightAdjuster {
      * is not accepting new requets. For more information see the code definitions at the top of the page.
      */
     void onMcuFeedback(const std_msgs::String::ConstPtr& msg) {
-
-        // TODO ignore messages received when action state is not active
         feedback.currentValue = atoi(msg->data.c_str());
         feedbackIsNew = true;
     }

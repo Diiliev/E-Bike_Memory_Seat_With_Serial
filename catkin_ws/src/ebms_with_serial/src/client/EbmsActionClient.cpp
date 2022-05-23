@@ -11,6 +11,9 @@
     and communication delays. No seat adjustment action should take more than 30s.
 */
 #define ACTION_TIMER 30.0
+#define HIGH 140
+#define MEDIUM 70
+#define LOW 10
 
 typedef actionlib::SimpleActionClient<ebms_with_serial::adjustSeatHeightAction> Client;
 
@@ -35,10 +38,26 @@ void feedbackCb(const ebms_with_serial::adjustSeatHeightFeedbackConstPtr &feedba
     ROS_INFO("The current seat height is: %dmm", feedback->currentValue);
 }
 
-
+/**
+ * @brief Send a goal height to the Action Server when a button is pressed.
+ * There are three buttons in total which represent three goal heights:
+ * Low, Medium and High. The buttons publish a boolean message to their
+ * respective topic. When they pressed they publish true, when released
+ * they publish false. Only send new goals to the action server,
+ * if the last one is done executing.
+ * 
+ * @param btnPressed represents the state of the button. True means it was
+ * pressed, false means it was released.
+ * @param btnHeight the seat height corresponding to the pressed button.
+ * It can be one of three values defined above: HIGH, MEDIUM and LOW.
+ * @param actionClientPtr a pointer to the action client used to send
+ * the goal to the Action Server.
+ */
 void sendGoalOnButtonPressed(bool btnPressed, u_int8_t btnHeight, const boost::shared_ptr<Client> &actionClientPtr) {
 
-    if (btnPressed) {
+    actionlib::SimpleClientGoalState lastGoalState = actionClientPtr->getState();
+
+    if (btnPressed && lastGoalState.isDone()) {
         // send a goal to the action server
         ebms_with_serial::adjustSeatHeightGoal goal;
         goal.wantedHeight = btnHeight;
@@ -49,8 +68,8 @@ void sendGoalOnButtonPressed(bool btnPressed, u_int8_t btnHeight, const boost::s
 
         if (finished_before_timeout)
         {
-            actionlib::SimpleClientGoalState state = actionClientPtr->getState();
-            ROS_INFO("Action finished: %s",state.toString().c_str());
+            lastGoalState = actionClientPtr->getState();
+            ROS_INFO("Action finished: %s",lastGoalState.toString().c_str());
         }
         // TODO what happens if we receive the goal height feedback message after timeout?
         // Maybe set state here to FAILED or try to pass the goalId with the goal
@@ -65,25 +84,27 @@ void sendGoalOnButtonPressed(bool btnPressed, u_int8_t btnHeight, const boost::s
             actionClientPtr->cancelGoal();
         }
         
+    } else if (!lastGoalState.isDone()) {
+        ROS_INFO("Action can not be executed now. The current goal is in %s state.",lastGoalState.toString().c_str());
     }
 }
 
 void btnHighCallback(const std_msgs::Bool::ConstPtr& msg, const boost::shared_ptr<Client> &actionClientPtr)
 {
     ROS_INFO("Button High is: [%d]", msg->data);
-    sendGoalOnButtonPressed(msg->data, 140, actionClientPtr);
+    sendGoalOnButtonPressed(msg->data, HIGH, actionClientPtr);
 }
 
 void btnMediumCallback(const std_msgs::Bool::ConstPtr& msg, const boost::shared_ptr<Client> &actionClientPtr)
 {
     ROS_INFO("Button Medium is: [%d]", msg->data);
-    sendGoalOnButtonPressed(msg->data, 70, actionClientPtr);
+    sendGoalOnButtonPressed(msg->data, MEDIUM, actionClientPtr);
 }
 
 void btnLowCallback(const std_msgs::Bool::ConstPtr& msg, const boost::shared_ptr<Client> &actionClientPtr)
 {
     ROS_INFO("Button Low is: [%d]", msg->data);
-    sendGoalOnButtonPressed(msg->data, 10, actionClientPtr);
+    sendGoalOnButtonPressed(msg->data, LOW, actionClientPtr);
 }
 
 int main (int argc, char **argv)
