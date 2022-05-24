@@ -6,11 +6,14 @@
 
 /*  If it takes ~135ms to move the actuator 1mm, then in the worst case scenario
     which is to travel from 0mm to 150mm a distance of 150mm, it will take the
-    actuator 20.25s to finish the task. We have rounded this number to compensate for
-    different actuator speeds depending on the load on the actuator, overshoot protection
-    and communication delays. No seat adjustment action should take more than 30s.
+    actuator 20.25s to finish the task. Afterwords the actutor must rest for 81s,
+    because it has a duty cycle of 25%.
+    We have rounded this number to compensate for different actuator speeds,
+    depending on the load on the actuator, overshoot protection and communication
+    delays. The seat adjustment action contains the seat adjustment period and the
+    resting period. No seat adjustment action should take longer than 115s.
 */
-#define ACTION_TIMER 30.0
+#define ACTION_TIMER 115.0
 #define HIGH 140
 #define MEDIUM 70
 #define LOW 10
@@ -39,10 +42,11 @@ void feedbackCb(const ebms_with_serial::adjustSeatHeightFeedbackConstPtr &feedba
 }
 
 /**
- * @brief Send a goal height to the Action Server when a button is pressed.
+ * @brief Send a goal height to the Action Server when a button is pressed
+ * and reject new goals until the current one has finished executing.
  * There are three buttons in total which represent three goal heights:
  * Low, Medium and High. The buttons publish a boolean message to their
- * respective topic. When they pressed they publish true, when released
+ * respective topic. When they are pressed they publish true, when released
  * they publish false. Only send new goals to the action server,
  * if the last one is done executing.
  * 
@@ -56,6 +60,7 @@ void feedbackCb(const ebms_with_serial::adjustSeatHeightFeedbackConstPtr &feedba
 void sendGoalOnButtonPressed(bool btnPressed, u_int8_t btnHeight, const boost::shared_ptr<Client> &actionClientPtr) {
 
     actionlib::SimpleClientGoalState lastGoalState = actionClientPtr->getState();
+    ROS_INFO("lastGoalState = %s, isDone() = %d.",lastGoalState.toString().c_str(), lastGoalState.isDone());
 
     if (btnPressed && lastGoalState.isDone()) {
         // send a goal to the action server
@@ -63,28 +68,32 @@ void sendGoalOnButtonPressed(bool btnPressed, u_int8_t btnHeight, const boost::s
         goal.wantedHeight = btnHeight;
         actionClientPtr->sendGoal(goal, &doneCb, &activeCb, &feedbackCb);
 
-        //wait for the action to return
-        bool finished_before_timeout = actionClientPtr->waitForResult(ros::Duration(ACTION_TIMER));
+        // wait for the action to complete and reject all incomming requests until then
+        ros::Duration timerDuration(ACTION_TIMER);
+        ros::Time endTime = ros::Time::now() + timerDuration;
+        bool finishedBeforeTimeout = false;
 
-        if (finished_before_timeout)
-        {
-            lastGoalState = actionClientPtr->getState();
-            ROS_INFO("Action finished: %s",lastGoalState.toString().c_str());
-        }
-        // TODO what happens if we receive the goal height feedback message after timeout?
-        // Maybe set state here to FAILED or try to pass the goalId with the goal
-        // in order to receive feedback messages with the same ID.
-        /*
-            ------------------------------------------------------------------------------
-            TODO how do we notify the microcontroller that the action has been cancelled?
-            ------------------------------------------------------------------------------
-        */
-        else {
-            ROS_INFO("Action did not finish before the time out. Cancelling...");
-            actionClientPtr->cancelGoal();
+        while (ros::ok()) {
+            ros::Duration timeLeft = endTime - ros::Time::now();
+            actionlib::SimpleClientGoalState goalState = actionClientPtr->getState();
+
+            if (timeLeft <= ros::Duration(0, 0)) {
+                //------------------------------------------------------------------------------
+                // TODO how do we notify the microcontroller that the action has been cancelled?
+                //------------------------------------------------------------------------------
+                ROS_WARN("Action did not finish before the time out. Cancelling...");
+                actionClientPtr->cancelGoal();
+                break;
+            }
+            if (goalState.isDone()) {
+                ROS_INFO("Action finished in time with state: %s", goalState.toString().c_str());
+                break;
+            }
+
+            ros::spinOnce();
         }
         
-    } else if (!lastGoalState.isDone()) {
+    } else if (btnPressed && !lastGoalState.isDone()) {
         ROS_INFO("Action can not be executed now. The current goal is in %s state.",lastGoalState.toString().c_str());
     }
 }

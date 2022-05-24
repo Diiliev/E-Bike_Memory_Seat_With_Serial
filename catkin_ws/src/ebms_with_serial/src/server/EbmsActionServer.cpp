@@ -12,13 +12,8 @@
  * 
  */
 #define STALLED_CODE 255
-
-// Topic names for communication with the microcontroller
-#define SEND_TO_ARDUINO "newSeatHeight"
-#define READ_FROM_ARDUINO "currentSeatHeight"
-
-#define MAX_SEAT_HEIGHT 150
-#define DIGITS_OF_MAX_SEAT_HEIGHT 3
+#define RESTING_CODE 254
+#define DONE_CODE 253
 /* 
     It is impossible for the seat height to be above 150mm.
     Nevertheless, we use this constant to initialise the currentSeatHeight variable,
@@ -35,7 +30,15 @@
     variable, the action would be completed successfully before we've had the chance
     to read what the actual measured position of the seat is from the microcontroller.
 */
-#define INITIAL_SEAT_HEIGHT 151
+#define INITIAL_VALUE 151
+
+// Topic names for communication with the microcontroller
+#define SEND_TO_ARDUINO "newSeatHeight"
+#define READ_FROM_ARDUINO "currentSeatHeight"
+
+#define MAX_SEAT_HEIGHT 150
+#define DIGITS_OF_MAX_SEAT_HEIGHT 3
+
 
 class SeatHeightAdjuster {
 
@@ -70,24 +73,31 @@ class SeatHeightAdjuster {
             // initialize class members
             seatHeightPub = nodeHandle.advertise<std_msgs::String>(SEND_TO_ARDUINO, 1000);
             seatHeightSub = nodeHandle.subscribe(READ_FROM_ARDUINO, 1000, &SeatHeightAdjuster::onMcuFeedback, this);
-            feedback.currentValue = INITIAL_SEAT_HEIGHT;
-            currentSeatHeight = INITIAL_SEAT_HEIGHT;
+            feedback.currentValue = INITIAL_VALUE;
+            currentSeatHeight = INITIAL_VALUE;
             feedbackIsNew = false;
         }
     
     ~SeatHeightAdjuster(void) { }
 
+    /**
+     * @brief The time it takes to execute any given seat adjustment action is
+     * the sum of the time it takes to reach the given position and the time it
+     * takes for the actuator to cool down. These are referred to as the adjustment
+     * period and the resting period. The sum of the adjustment period and the resting
+     * period, i.e the action execution time, should not be longer than 115s for
+     * any given goal height.
+     * 
+     * @param goal this contains the wanted seat height sent to the microcontroller.
+     */
     void executeCB(const ebms_with_serial::adjustSeatHeightGoalConstPtr &goal) {
-        ros::Rate rate(10);
+        // ros::Rate rate(10);
 
         ROS_INFO("Executing %s, wanted height is %imm",
             actionName.c_str(),
             goal->wantedHeight
         );
 
-        // -------------------------------------------------
-        // TODO what happens when the arduino is "resting" ?
-        // -------------------------------------------------
         // send the goal height to the microcontroller by publishing it to the pubToArduinoTopic.
         publishNewHeight(goal->wantedHeight);
         
@@ -101,50 +111,41 @@ class SeatHeightAdjuster {
         // -------------------------------------------------
         // TODO notify the arduino when the goal has been cancelled.
         // -------------------------------------------------
-        while (currentSeatHeight != goal->wantedHeight) {
+        while (feedback.currentValue != DONE_CODE) {
 
             if (actionServer.isPreemptRequested() || !ros::ok()) {
-                // TODO what happens when the current value is > MAX_SEAT_HEIHT i.e special?
-                // we have received information that the arduino is resting or has stalled
-                // and the client has cancelled the action. What do we do then?
-                if (feedbackIsNew && feedback.currentValue <= MAX_SEAT_HEIGHT) {
+                // TODO notify the arduino when the goal has been cancelled.
+                ROS_WARN("Action was cancelled or preempted.");
+                break;
+            }
+
+            if (feedbackIsNew) {
+
+                feedbackIsNew = false;
+
+                if (feedback.currentValue <= MAX_SEAT_HEIGHT) {
                     currentSeatHeight = feedback.currentValue;
                     publishFeedbackToAC(feedback);
                 }
-                feedbackIsNew = false;
-                result.finalHeight = currentSeatHeight;
-                currentSeatHeight = INITIAL_SEAT_HEIGHT;
-                actionServer.setPreempted(result, "Action was cancelled or preempted.");
-                // TODO this will print INITIAL_SEAT_HEIGHT if the microcontroller doesn't send
-                // feedback of the current height and the timeout preempt is called from the Action Client. 
-                ROS_INFO("Action was cancelled or preempted. Final seat height: %dmm", result.finalHeight);
-
-                return;
+                else if (feedback.currentValue == STALLED_CODE) ROS_ERROR("The actuator has stalled!");
+                else if (feedback.currentValue == RESTING_CODE) ROS_INFO("Resting...");
             }
-
-            if (feedbackIsNew && feedback.currentValue > MAX_SEAT_HEIGHT) {
-                switch (feedback.currentValue){
-                    case STALLED_CODE : {
-                        feedbackIsNew = false;
-                        result.finalHeight = currentSeatHeight;
-                        currentSeatHeight = INITIAL_SEAT_HEIGHT;
-                        actionServer.setAborted(result, "Actuator has stalled.");
-                        ROS_ERROR("The actuator has stalled!");
-                        return;
-                    }
-                }
-            } else if(feedbackIsNew) {
-                currentSeatHeight = feedback.currentValue;
-                publishFeedbackToAC(feedback);
-            }
-            
-            rate.sleep();
         }
 
         result.finalHeight = currentSeatHeight;
-        currentSeatHeight = INITIAL_SEAT_HEIGHT;
-        actionServer.setSucceeded(result, "Success"); 
-        ROS_INFO("%s Succeeded :) the final height is: %dmm", actionName.c_str(), result.finalHeight); 
+
+        if (result.finalHeight == goal->wantedHeight) {
+            actionServer.setSucceeded(result, "Success"); 
+            ROS_INFO("%s Succeeded :) the final height is: %dmm", actionName.c_str(), result.finalHeight);
+        } else actionServer.setPreempted(result);
+        
+        // reset the feedback's current value and flag to be ready for the next action
+        feedback.currentValue = INITIAL_VALUE;
+        feedbackIsNew = false;
+
+        ROS_INFO("Ready for a new action goal.");
+        
+        return;
     }
 
     private:
@@ -177,7 +178,6 @@ class SeatHeightAdjuster {
      */
     void publishFeedbackToAC(const ebms_with_serial::adjustSeatHeightFeedback &feedbackMsg) {
         actionServer.publishFeedback(feedbackMsg);
-        feedbackIsNew = false;
     }
 
     /**

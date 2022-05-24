@@ -7,6 +7,8 @@
 #define MAX_WORK_TIME 60000
 #define STALL_TIME 5000 // In theory this should be 26ms but in reality the time it takes to move the actuator with 1mm is ~135ms.
 #define STALLED_CODE 255
+#define RESTING_CODE 254
+#define DONE_CODE 253
 #define ACTUATOR_STOP_TIME 100
 #define READ_FROM_ROS_TOPIC "newSeatHeight"
 #define SEND_TO_ROS_TOPIC "currentSeatHeight"
@@ -343,32 +345,41 @@ void stopTheActuator() {
 void restTheActuator(unsigned long workTime) {
 
   nh.loginfo("Resting...");
+  sendFeedback(RESTING_CODE);
+  
   unsigned long restTime = 4 * workTime;
-
   unsigned long startTime = millis();
+  
   while(millis() < startTime + restTime) {
     nh.spinOnce();
     delay(1);
   }
-  
+
+  sendFeedback(DONE_CODE);
   nh.loginfo("Ready");
 }
 
 /**
- * Send feedback to the ROS on board computer.
+ *  Send feedback to the ROS Action Server.
  * 
- *  One char is used for every digit of the number
- *  and one char is added for the null terminator
+ *  One char is used for every digit of the feedback number,
+ *  which can have a value between 0 and 255,
+ *  and one char is added for the null terminator.
+ *  Numbers between 0 and 150 describe the current seat height
+ *  in millimeters. Numbers between 151 and 255 are used to
+ *  describe other conditions or states such as:
+ *  "the actuator has stalled", or "the microcontroller is
+ *  resting", etc.
  *  
  *  byte [0] stores the digit for the hundreds
  *  byte [1] stores the digit for the tens
  *  byte [2] stores the digit for the units
  *  byte [3] stores the Null-Terminator '\0'
  */
-void sendFeedback(byte currentHeight) {
+void sendFeedback(byte feedback) {
 
-  char currentHeightToStr[HEIGHT_MAX_DIGITS + sizeof(char)]; 
-  itoa (currentHeight, currentHeightToStr, 10); // convert int to string and save it into char*
-  feedbackMsg.data = currentHeightToStr; // save the char* value inside the std_msgs::String data parameter
+  char feedbackToStr[HEIGHT_MAX_DIGITS + sizeof(char)]; 
+  itoa (feedback, feedbackToStr, 10); // convert the number into a character array
+  feedbackMsg.data = feedbackToStr; // feed the std_msgs::String data parameter
   feebackTopic.publish(&feedbackMsg);
 }
