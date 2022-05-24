@@ -14,6 +14,8 @@
 #define STALLED_CODE 255
 #define RESTING_CODE 254
 #define DONE_CODE 253
+#define CANCEL_CODE 252
+
 /* 
     It is impossible for the seat height to be above 150mm.
     Nevertheless, we use this constant to initialise the currentSeatHeight variable,
@@ -100,6 +102,8 @@ class SeatHeightAdjuster {
 
         // send the goal height to the microcontroller by publishing it to the pubToArduinoTopic.
         publishNewHeight(goal->wantedHeight);
+
+        bool cancelRequestSent = false;
         
         // This loop checks the latest feedback messages from the microcontroller
         // with a frequency of ros::Rate, which is currently set to 10 times a second.
@@ -108,15 +112,15 @@ class SeatHeightAdjuster {
         // If the actuator stalls, the action is aborted.
         // If the action takes too long to execute, the Action Client cancels the current goal
         // which is detected by the Action Server as a preempt request.
-        // -------------------------------------------------
-        // TODO notify the arduino when the goal has been cancelled.
-        // -------------------------------------------------
         while (feedback.currentValue != DONE_CODE) {
 
-            if (actionServer.isPreemptRequested() || !ros::ok()) {
-                // TODO notify the arduino when the goal has been cancelled.
+            if ((actionServer.isPreemptRequested() || !ros::ok()) && !cancelRequestSent) {
+                
+                // notify the microcontroller that the action has been cancelled
+                // and wait for it to finish resting
+                publishNewHeight(CANCEL_CODE);
                 ROS_WARN("Action was cancelled or preempted.");
-                break;
+                cancelRequestSent = true;
             }
 
             if (feedbackIsNew) {
@@ -139,9 +143,10 @@ class SeatHeightAdjuster {
             ROS_INFO("%s Succeeded :) the final height is: %dmm", actionName.c_str(), result.finalHeight);
         } else actionServer.setPreempted(result);
         
-        // reset the feedback's current value and flag to be ready for the next action
+        // reset the feedback's current value and flags to be ready for the next action
         feedback.currentValue = INITIAL_VALUE;
         feedbackIsNew = false;
+        cancelRequestSent = false;
 
         ROS_INFO("Ready for a new action goal.");
         

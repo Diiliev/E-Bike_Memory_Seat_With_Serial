@@ -13,7 +13,8 @@
     delays. The seat adjustment action contains the seat adjustment period and the
     resting period. No seat adjustment action should take longer than 115s.
 */
-#define ACTION_TIMER 115.0
+// #define ACTION_TIMER 115.0 // real value
+#define ACTION_TIMER 10.0 //test value
 #define HIGH 140
 #define MEDIUM 70
 #define LOW 10
@@ -27,7 +28,7 @@ void doneCb(const actionlib::SimpleClientGoalState &state, const ebms_with_seria
         ROS_INFO("Success! The final seat height is: %dmm", result->finalHeight);
     }
     else {
-        ROS_INFO("Task failed. Goal state is: %s", state.toString().c_str());
+        ROS_INFO("Task failed. The final seat height is: %dmm", result->finalHeight);
     }
 }
 
@@ -78,9 +79,6 @@ void sendGoalOnButtonPressed(bool btnPressed, u_int8_t btnHeight, const boost::s
             actionlib::SimpleClientGoalState goalState = actionClientPtr->getState();
 
             if (timeLeft <= ros::Duration(0, 0)) {
-                //------------------------------------------------------------------------------
-                // TODO how do we notify the microcontroller that the action has been cancelled?
-                //------------------------------------------------------------------------------
                 ROS_WARN("Action did not finish before the time out. Cancelling...");
                 actionClientPtr->cancelGoal();
                 break;

@@ -9,22 +9,39 @@
 #define STALLED_CODE 255
 #define RESTING_CODE 254
 #define DONE_CODE 253
+#define CANCEL_CODE 252
 #define ACTUATOR_STOP_TIME 100
 #define READ_FROM_ROS_TOPIC "newSeatHeight"
 #define SEND_TO_ROS_TOPIC "currentSeatHeight"
 #define HEIGHT_MAX_DIGITS 3
 
+bool actionIsCancelled;
+
 ros::NodeHandle  nh;
 
 // setup ros subscriber. The arduino receives commands from ROS by subscribing to the "changeHeight" topic.
 void messageCb( const std_msgs::String& wantedHeight){
+  
   byte goalHeight = atoi(wantedHeight.data); 
-  byte currentHeight = getCurrentHeight();
-  sendFeedback(currentHeight);
 
-  if (currentHeight == goalHeight) stopTheActuator();
-  else if (currentHeight < goalHeight) raiseTheActuator(currentHeight, goalHeight, 0);
-  else if (currentHeight > goalHeight) lowerTheActuator(currentHeight, goalHeight, 0);
+  // if the action is cancelled stop the actuator immediatelly and raise the flag.
+  // This will exit any raising or lowering loop and lead to the resting function.
+  if (goalHeight == CANCEL_CODE) {
+    stopTheActuator();
+    actionIsCancelled = true;
+    nh.loginfo("Cancelled.");
+  } 
+  
+  // otherwise lower the flag and continue as usual
+  else {
+    actionIsCancelled = false;
+    byte currentHeight = getCurrentHeight();
+    sendFeedback(currentHeight);
+  
+    if (currentHeight == goalHeight) stopTheActuator();
+    else if (currentHeight < goalHeight) raiseTheActuator(currentHeight, goalHeight, 0);
+    else if (currentHeight > goalHeight) lowerTheActuator(currentHeight, goalHeight, 0);
+  }
 }
 
 ros::Subscriber<std_msgs::String> rosCommandsTopic(READ_FROM_ROS_TOPIC, &messageCb );
@@ -38,6 +55,7 @@ ros::Publisher feebackTopic(SEND_TO_ROS_TOPIC, &feedbackMsg);
 void setup() {
 
   nh.initNode();
+  actionIsCancelled = false;
   nh.subscribe(rosCommandsTopic);
   nh.advertise(feebackTopic);
   
@@ -135,16 +153,13 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
   digitalWrite(MOTOR_F, HIGH);
   digitalWrite(MOTOR_B, LOW);
   
-  while (currentHeight < goalHeight && millis() < (startTime + availableWorkTime)) {
+  while (currentHeight < goalHeight && millis() < (startTime + availableWorkTime) && !actionIsCancelled) {
 
     // stall protection 
     if (millis() > stallTimer) {
       stopTheActuator();
       sendFeedback(STALLED_CODE); //This feedback message will abort the ROS action.
       nh.logwarn("Stalled!");
-      // -----------------------------------------------------------------------
-      // TODO maybe notify the Action Server of the final position before stall.
-      // -----------------------------------------------------------------------
       break;
     }
 
@@ -176,7 +191,9 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
   // Calculate the time spent working by the actuator
   unsigned long workTime = millis() - startTime + elapsedWorkTime;
 
-  // Check if position is overshot, successful on goal or failed due to stall.
+  // First condition is for Overshoot protection
+  // Second condition is the successful case
+  // Third condition is in case the actuator has stalled
   if (currentHeight > goalHeight) {
     lowerTheActuator(currentHeight, goalHeight, workTime);
   }
@@ -191,8 +208,6 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
      * Maybe we need a better strategy? Try to un-stall the actuator by moving up/down 
      * or maybe just deny all incomming requests until a human has fixed the actuator
      * and restarted the microcontroller.
-     * 
-     * Maybe notify the Action Server of the final position before it stalled?
     */
     restTheActuator(workTime);
   }
@@ -254,7 +269,7 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
   digitalWrite(MOTOR_F, LOW);
   digitalWrite(MOTOR_B, HIGH);
 
-  while (currentHeight > goalHeight && millis() < (startTime + availableWorkTime)) {
+  while (currentHeight > goalHeight && millis() < (startTime + availableWorkTime) && !actionIsCancelled) {
 
     // stall protection
     if (millis() > stallTimer) {
@@ -293,11 +308,13 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
   // Calculate the time spent working by the actuator
   unsigned long workTime = millis() - startTime + elapsedWorkTime;
 
-  // Check if position is overshot, successful on goal or failed due to stall.
+  // First condition is for Overshoot protection
+  // Second condition is the successful case
+  // Third condition is in case the actuator has stalled
   if (currentHeight < goalHeight) {
     raiseTheActuator(currentHeight, goalHeight, workTime);
   }
-  else if(currentHeight == goalHeight){
+  else if(currentHeight == goalHeight){ 
     sendFeedback(currentHeight);
     nh.loginfo("Done!");
     restTheActuator(workTime);
