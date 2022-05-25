@@ -1,0 +1,22 @@
+<launch>
+    <!-- 
+        These environment variables are necessary for ROS Mobile's logger widget to be able to subscribe
+        to /log topic and display its messages. They are placed on top in the launch file so that every
+        node has the correct environment variables set. 
+        This IP address is assigned when connected to a mobile Wi-Fi hotspot.
+        Your address will most likely be different. Use 
+        $ ifconfig 
+        to find your own IP address and replace it in the following three environment variables.
+    -->
+    <env name="ROS_IP" value="192.168.43.45"></env>
+    <env name="ROS_MASTER_URI" value="http://192.168.43.45:11311"></env>
+    <env name="ROS_HOSTNAME" value="192.168.43.45"></env>
+
+    <!-- Start the rosserial node to establish communication with the microcontroller -->
+    <node name="mcu_serial_node" pkg="rosserial_python" type="serial_node.py" respawn="true" output="log">
+        <param name="port" value="/dev/ttyACM0"/>
+    </node>
+
+    <node name="action_server_node" pkg="ebms_with_serial" type="ebmsActionServer" respawn="true" output="screen"> </node>
+    <node name="action_client_node" pkg="ebms_with_serial" type="ebmsActionClient" respawn="true" output="screen"> </node>
+</launch>

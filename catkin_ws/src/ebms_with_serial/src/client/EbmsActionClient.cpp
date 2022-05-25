@@ -13,8 +13,7 @@
     delays. The seat adjustment action contains the seat adjustment period and the
     resting period. No seat adjustment action should take longer than 115s.
 */
-// #define ACTION_TIMER 115.0 // real value
-#define ACTION_TIMER 10.0 //test value
+#define ACTION_TIMER 115.0
 #define HIGH 140
 #define MEDIUM 70
 #define LOW 10
