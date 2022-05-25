@@ -7,41 +7,61 @@
    - Change the IP address for the environment variables to your actual address. You can find it using `$ ifconfig`.
    - Make sure the port to which the microcontroller is connected is the same as the one in the launch file "/dev/ttyACM0". If it isn't change it to the actual port value.
 3. In a new terminal, change your directory to the catkin workspace
-    `cd E-Bike_Memory_Seat_With_Serial/catkin_ws`
+```
+$ cd E-Bike_Memory_Seat_With_Serial/catkin_ws
+```
 4. Build the project
-    `$ catkin_make`
+```
+$ catkin_make
+```
 5. Setup the current environment
-    `$ source devel/setup.bash`
+```
+$ source devel/setup.bash
+```
 6. Connect the android phone to the same Wi-Fi network as the PC.
 7. Configure ROS Mobile
    - Click on "Add Configuration" and add three button widgets and one logger widget. The buttons should publish to topics named "btn_high", "btn_medium" and "btn_low". The logger should be subscribed to a topic named "log".
    - In the MASTER tab, Enter your IP address from step 1 into the Master URL field.
    - Master port should be 11311
+   - launch ROS master or the entire project
    - Click on CONNECT and open the VIZ tab
 
 ## Quick launch instructions
 1. Launch the project
-`$ roslaunch ebms_with_serial ebmsWithSerial.launch`
+```
+$ roslaunch ebms_with_serial ebmsWithSerial.launch
+```
 This will start rosserial, the action client and the action server.
 2. In ROS Mobile, click on a button.
 This will start the appropriate action. You can monitor its progress in the logger field.
 
 
 ## How to run the project without the launch file
+This is very useful for debugging purposes because every terminal wondow has its own output. The terminal running the rosserial node outputs messages sent from the microcontroller. The terminals running the action server and client nodes, output their respective messages.
 1. Start the ROS master node
-    `roscore`
+```
+$ roscore
+```
 2. Start the rosserial communication between the Ubuntu machine and the arduino microcontroller (in a new terminal window)
-    `$ rosrun rosserial_python serial_node.py /dev/ttyACM0`
-    You can find the correct serial port by opening the Arduino IDE Tools/Port: "..."
+```
+$ rosrun rosserial_python serial_node.py /dev/ttyACM0
+```
+You can find the correct serial port by opening the Arduino IDE Tools/Port: "..."
 3. Start the Action Client
-    `$ source devel/setup.bash`
-    `$ rosrun ebms_with_serial ebmsActionClient`
+```
+$ source devel/setup.bash
+$ rosrun ebms_with_serial ebmsActionClient
+```
 4. Start the Action Server
-    `$ source devel/setup.bash`
-    `$ rosrun ebms_with_serial ebmsActionServer`
+```
+$ source devel/setup.bash
+$ rosrun ebms_with_serial ebmsActionServer
+```
 5. Open ROS Mobile on your android device, go to the MASTER tab
 6. Connect to the current IP address of ROS Master, you can find it with
-    `$ ifconfig`
+```
+$ ifconfig
+```
 7. Open the VIZ tab and press one of the three buttons.
 Pressing any button will send a message to the action client. The action client will send a goal to the Action Server. The Action Server will send the new wanted seat height to the Arduino Uno microcontroller. The microcontroller will begin moving the seat and sending feedback of the current position to the Action Server. The Action server will forward this feedback information to the Action Client. The Action Client will use this information to determine when the microcontroller is ready to service a new goal.
 
@@ -62,4 +82,4 @@ With that in mind, if we want to cancel the currently active goal from the Actio
 In the current state of the project, when an action has started it will run until it finishes or the timer runs out. The only case in which an action is cancelled is when the timer of the Action Client runs out. New action requests can not preempt a previus action. If the user tries to send a new goal before the previus one has finished, their request will be ignored and they will be notified of that in real time. 
 
 TODO:
-- Send messages to ROS Mobile logger widget to notify the user of the progress of their request.
+- Make the arduino send the time left for the cooldown i.e "resting" period

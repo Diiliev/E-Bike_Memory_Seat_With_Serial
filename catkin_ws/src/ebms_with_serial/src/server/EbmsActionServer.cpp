@@ -34,9 +34,10 @@
 */
 #define INITIAL_VALUE 151
 
-// Topic names for communication with the microcontroller
+// Topic names for communication with the microcontroller and ROS Mobile
 #define SEND_TO_ARDUINO "newSeatHeight"
 #define READ_FROM_ARDUINO "currentSeatHeight"
+#define SEND_TO_USER "log" // logger widget topic name
 
 #define MAX_SEAT_HEIGHT 150
 #define DIGITS_OF_MAX_SEAT_HEIGHT 3
@@ -50,6 +51,7 @@ class SeatHeightAdjuster {
     std::string actionName;
     ros::Publisher seatHeightPub;
     ros::Subscriber seatHeightSub;
+    ros::Publisher notifyUserPub;
     ebms_with_serial::adjustSeatHeightFeedback feedback;
     u_int8_t currentSeatHeight; 
     /**
@@ -75,6 +77,7 @@ class SeatHeightAdjuster {
             // initialize class members
             seatHeightPub = nodeHandle.advertise<std_msgs::String>(SEND_TO_ARDUINO, 1000);
             seatHeightSub = nodeHandle.subscribe(READ_FROM_ARDUINO, 1000, &SeatHeightAdjuster::onMcuFeedback, this);
+            notifyUserPub = nodeHandle.advertise<std_msgs::String>(SEND_TO_USER, 1000);
             feedback.currentValue = INITIAL_VALUE;
             currentSeatHeight = INITIAL_VALUE;
             feedbackIsNew = false;
@@ -119,7 +122,8 @@ class SeatHeightAdjuster {
                 // notify the microcontroller that the action has been cancelled
                 // and wait for it to finish resting
                 publishNewHeight(CANCEL_CODE);
-                ROS_WARN("Action was cancelled or preempted.");
+                ROS_WARN("The action was cancelled.");
+                publishFeedbackToMobile("The action was cancelled.");
                 cancelRequestSent = true;
             }
 
@@ -130,9 +134,16 @@ class SeatHeightAdjuster {
                 if (feedback.currentValue <= MAX_SEAT_HEIGHT) {
                     currentSeatHeight = feedback.currentValue;
                     publishFeedbackToAC(feedback);
+                    publishFeedbackToMobile("Current seat height is: ", currentSeatHeight, "mm");
                 }
-                else if (feedback.currentValue == STALLED_CODE) ROS_ERROR("The actuator has stalled!");
-                else if (feedback.currentValue == RESTING_CODE) ROS_INFO("Resting...");
+                else if (feedback.currentValue == STALLED_CODE) {
+                    ROS_ERROR("The actuator has stalled!");
+                    publishFeedbackToMobile("The actuator has stalled!");
+                }
+                else if (feedback.currentValue == RESTING_CODE) {
+                    ROS_INFO("Resting...");
+                    publishFeedbackToMobile("The actuator is in cooldown");
+                }
             }
         }
 
@@ -149,6 +160,7 @@ class SeatHeightAdjuster {
         cancelRequestSent = false;
 
         ROS_INFO("Ready for a new action goal.");
+        publishFeedbackToMobile("Done! The final seat height is: ", result.finalHeight, "mm. The buttons are active!");
         
         return;
     }
@@ -183,6 +195,39 @@ class SeatHeightAdjuster {
      */
     void publishFeedbackToAC(const ebms_with_serial::adjustSeatHeightFeedback &feedbackMsg) {
         actionServer.publishFeedback(feedbackMsg);
+    }
+
+    /**
+     * @brief Publish a string message to the /log topic
+     * which is visualized in ROS Mobile's "logger" widged.
+     * Example messages:
+     * - The actuator has stalled!
+     * - The action has been cancelled!
+     * - Ready for a new request.
+     * 
+     * @param userMsg 
+     */
+    void publishFeedbackToMobile(std::string userMsg){
+        std_msgs::String msg;
+        msg.data = userMsg;
+        notifyUserPub.publish(msg);
+    }
+
+    /**
+     * @brief Publish a message containing a number surrounded by two strings
+     * to the /log topic which is visualized in ROS Mobile's "logger" widget.
+     * Example messages:
+     * - The current seat height is: 51mm
+     * - Cooldown, 12s remaining.
+     * 
+     * @param leftString 
+     * @param number 
+     * @param rightString 
+     */
+    void publishFeedbackToMobile(std::string leftString, uint8_t number, std::string rightString){
+        std_msgs::String msg;
+        msg.data = leftString + std::to_string(number) + rightString;
+        notifyUserPub.publish(msg);
     }
 
     /**
