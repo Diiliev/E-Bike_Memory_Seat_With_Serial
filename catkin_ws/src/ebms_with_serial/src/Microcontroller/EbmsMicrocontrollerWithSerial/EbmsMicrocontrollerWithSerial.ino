@@ -13,7 +13,9 @@
 #define ACTUATOR_STOP_TIME 100
 #define READ_FROM_ROS_TOPIC "newSeatHeight"
 #define SEND_TO_ROS_TOPIC "currentSeatHeight"
+#define COOLDOWN_TOPIC "cooldownTime"
 #define HEIGHT_MAX_DIGITS 3
+#define COOLDOWN_TIME_MAX_DIGITS 6
 
 bool actionIsCancelled;
 
@@ -38,7 +40,7 @@ void messageCb( const std_msgs::String& wantedHeight){
     byte currentHeight = getCurrentHeight();
     sendFeedback(currentHeight);
   
-    if (currentHeight == goalHeight) stopTheActuator();
+    if (currentHeight == goalHeight) { stopTheActuator(); restTheActuator(0);}
     else if (currentHeight < goalHeight) raiseTheActuator(currentHeight, goalHeight, 0);
     else if (currentHeight > goalHeight) lowerTheActuator(currentHeight, goalHeight, 0);
   }
@@ -50,6 +52,9 @@ ros::Subscriber<std_msgs::String> rosCommandsTopic(READ_FROM_ROS_TOPIC, &message
 std_msgs::String feedbackMsg;
 ros::Publisher feebackTopic(SEND_TO_ROS_TOPIC, &feedbackMsg);
 
+std_msgs::String cooldownFeedbackMsg;
+ros::Publisher cooldownTopic(COOLDOWN_TOPIC, &cooldownFeedbackMsg);
+
 
 
 void setup() {
@@ -58,6 +63,7 @@ void setup() {
   actionIsCancelled = false;
   nh.subscribe(rosCommandsTopic);
   nh.advertise(feebackTopic);
+  nh.advertise(cooldownTopic);
   
   // initialise motor output pins and set to low.
   pinMode(MOTOR_F, OUTPUT);
@@ -209,6 +215,7 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
      * or maybe just deny all incomming requests until a human has fixed the actuator
      * and restarted the microcontroller.
     */
+    sendFeedback(currentHeight);
     restTheActuator(workTime);
   }
 }
@@ -320,6 +327,7 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
     restTheActuator(workTime);
   }
   else {
+    sendFeedback(currentHeight);
     restTheActuator(workTime);
   }
 }
@@ -364,12 +372,15 @@ void restTheActuator(unsigned long workTime) {
   nh.loginfo("Resting...");
   sendFeedback(RESTING_CODE);
   
-  unsigned long restTime = 4 * workTime;
-  unsigned long startTime = millis();
+  unsigned long cooldownTime = 4 * workTime;
+  unsigned long now = millis();
+  unsigned long endTime = now + cooldownTime;
   
-  while(millis() < startTime + restTime) {
+  while(now < endTime) {
+    sendCooldownFeedback(endTime - now);
     nh.spinOnce();
-    delay(1);
+    delay(100);
+    now = millis();
   }
 
   sendFeedback(DONE_CODE);
@@ -399,4 +410,14 @@ void sendFeedback(byte feedback) {
   itoa (feedback, feedbackToStr, 10); // convert the number into a character array
   feedbackMsg.data = feedbackToStr; // feed the std_msgs::String data parameter
   feebackTopic.publish(&feedbackMsg);
+}
+
+/**
+ * Send the time in seconds left until the cooldown has finished.
+ */
+void sendCooldownFeedback(unsigned long cooldownTime) {
+  char cooldownTimeToStr[COOLDOWN_TIME_MAX_DIGITS + sizeof(char)]; 
+  ultoa (cooldownTime, cooldownTimeToStr, 10); // convert unsigned long into a character array
+  cooldownFeedbackMsg.data = cooldownTimeToStr; // feed the std_msgs::String data parameter
+  cooldownTopic.publish(&cooldownFeedbackMsg);
 }

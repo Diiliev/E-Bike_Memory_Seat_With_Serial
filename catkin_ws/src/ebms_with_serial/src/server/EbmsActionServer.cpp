@@ -33,11 +33,13 @@
     to read what the actual measured position of the seat is from the microcontroller.
 */
 #define INITIAL_VALUE 151
+#define INITIAL_COOLDOWN_TIME_VALUE 0
 
 // Topic names for communication with the microcontroller and ROS Mobile
-#define SEND_TO_ARDUINO "newSeatHeight"
-#define READ_FROM_ARDUINO "currentSeatHeight"
-#define SEND_TO_USER "log" // logger widget topic name
+#define SEND_TO_ARDUINO_TOPIC "newSeatHeight"
+#define READ_FROM_ARDUINO_TOPIC "currentSeatHeight"
+#define COOLDOWN_TIME_TOPIC "cooldownTime"
+#define SEND_TO_USER_TOPIC "log" // logger widget topic name
 
 #define MAX_SEAT_HEIGHT 150
 #define DIGITS_OF_MAX_SEAT_HEIGHT 3
@@ -51,9 +53,13 @@ class SeatHeightAdjuster {
     std::string actionName;
     ros::Publisher seatHeightPub;
     ros::Subscriber seatHeightSub;
+    ros::Subscriber cooldownTimeSub;
     ros::Publisher notifyUserPub;
     ebms_with_serial::adjustSeatHeightFeedback feedback;
     u_int8_t currentSeatHeight; 
+    unsigned long cooldownTime;
+    bool cooldownTimeIsNew;
+
     /**
      * @brief This flag is used to ensure that every time we write feedback.currentValue to currentSeatHeight,
      * this value is a new measurement received from the microcontroller and not some old remembered value.
@@ -75,12 +81,15 @@ class SeatHeightAdjuster {
             actionServer.start();
 
             // initialize class members
-            seatHeightPub = nodeHandle.advertise<std_msgs::String>(SEND_TO_ARDUINO, 1000);
-            seatHeightSub = nodeHandle.subscribe(READ_FROM_ARDUINO, 1000, &SeatHeightAdjuster::onMcuFeedback, this);
-            notifyUserPub = nodeHandle.advertise<std_msgs::String>(SEND_TO_USER, 1000);
+            seatHeightPub = nodeHandle.advertise<std_msgs::String>(SEND_TO_ARDUINO_TOPIC, 1000);
+            seatHeightSub = nodeHandle.subscribe(READ_FROM_ARDUINO_TOPIC, 1000, &SeatHeightAdjuster::onMcuFeedback, this);
+            cooldownTimeSub = nodeHandle.subscribe(COOLDOWN_TIME_TOPIC, 1000, &SeatHeightAdjuster::onCooldownTimeMsg, this);
+            notifyUserPub = nodeHandle.advertise<std_msgs::String>(SEND_TO_USER_TOPIC, 1000);
             feedback.currentValue = INITIAL_VALUE;
             currentSeatHeight = INITIAL_VALUE;
+            cooldownTime = INITIAL_COOLDOWN_TIME_VALUE;
             feedbackIsNew = false;
+            cooldownTimeIsNew = false;
         }
     
     ~SeatHeightAdjuster(void) { }
@@ -115,9 +124,9 @@ class SeatHeightAdjuster {
         // If the actuator stalls, the action is aborted.
         // If the action takes too long to execute, the Action Client cancels the current goal
         // which is detected by the Action Server as a preempt request.
-        while (feedback.currentValue != DONE_CODE) {
-
-            if ((actionServer.isPreemptRequested() || !ros::ok()) && !cancelRequestSent) {
+        while (feedback.currentValue != DONE_CODE && ros::ok()) {
+            
+            if (actionServer.isPreemptRequested() && !cancelRequestSent) {
                 
                 // notify the microcontroller that the action has been cancelled
                 // and wait for it to finish resting
@@ -145,6 +154,12 @@ class SeatHeightAdjuster {
                     publishFeedbackToMobile("The actuator is in cooldown");
                 }
             }
+
+            if (cooldownTimeIsNew) {
+                ROS_INFO("Cooldown: %lums remaining.", cooldownTime);
+                publishFeedbackToMobile("Cooldown: ", cooldownTime, "ms remaining.");
+                cooldownTimeIsNew = false;
+            }
         }
 
         result.finalHeight = currentSeatHeight;
@@ -156,6 +171,7 @@ class SeatHeightAdjuster {
         
         // reset the feedback's current value and flags to be ready for the next action
         feedback.currentValue = INITIAL_VALUE;
+        cooldownTime = INITIAL_COOLDOWN_TIME_VALUE;
         feedbackIsNew = false;
         cancelRequestSent = false;
 
@@ -224,7 +240,7 @@ class SeatHeightAdjuster {
      * @param number 
      * @param rightString 
      */
-    void publishFeedbackToMobile(std::string leftString, uint8_t number, std::string rightString){
+    void publishFeedbackToMobile(std::string leftString, unsigned long number, std::string rightString){
         std_msgs::String msg;
         msg.data = leftString + std::to_string(number) + rightString;
         notifyUserPub.publish(msg);
@@ -245,6 +261,18 @@ class SeatHeightAdjuster {
     void onMcuFeedback(const std_msgs::String::ConstPtr& msg) {
         feedback.currentValue = atoi(msg->data.c_str());
         feedbackIsNew = true;
+    }
+
+    /**
+     * @brief get the cooldown time sent from the microcontroller in milliseconds.
+     * Convert it to seconds and store it in the class member cooldownTime.
+     * 
+     * @param msg the std_msgs::String message sent from the microcontroller
+     * containing the remaining cooldown time in milliseconds.
+     */
+    void onCooldownTimeMsg(const std_msgs::String::ConstPtr& msg) {
+        cooldownTime = std::stoul(msg->data.c_str(), nullptr, 10);
+        cooldownTimeIsNew = true;
     }
 };
 
