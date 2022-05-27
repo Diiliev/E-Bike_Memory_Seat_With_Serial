@@ -83,4 +83,3 @@ With that in mind, if we want to cancel the currently active goal from the Actio
 In the current state of the project, when an action has started it will run until it finishes or the timer runs out. The only case in which an action is cancelled is when the timer of the Action Client runs out. New action requests can not preempt a previus action. If the user tries to send a new goal before the previus one has finished, their request will be ignored and they will be notified of that in real time. 
 
 Todo:
-- bugfix: if the arduino is restarted, it will never send DONE_CODE which leaves the Action Server in an infinite loop.

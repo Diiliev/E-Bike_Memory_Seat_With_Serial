@@ -125,7 +125,7 @@ class SeatHeightAdjuster {
         // If the action takes too long to execute, the Action Client cancels the current goal
         // which is detected by the Action Server as a preempt request.
         while (feedback.currentValue != DONE_CODE && ros::ok()) {
-            
+
             if (actionServer.isPreemptRequested() && !cancelRequestSent) {
                 
                 // notify the microcontroller that the action has been cancelled
@@ -134,6 +134,12 @@ class SeatHeightAdjuster {
                 ROS_WARN("The action was cancelled.");
                 publishFeedbackToMobile("The action was cancelled.");
                 cancelRequestSent = true;
+                // if we have cancelled the action but we are not in cooldown,
+                // then break the loop, because the microcontroller has been restarted
+                // and we won't receive DONE_CODE
+                if (cooldownTime == INITIAL_COOLDOWN_TIME_VALUE) {
+                    break;
+                }
             }
 
             if (feedbackIsNew) {
