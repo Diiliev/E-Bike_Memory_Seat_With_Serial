@@ -19,6 +19,7 @@ $ catkin_make
 $ source devel/setup.bash
 ```
 6. Connect the android phone to the same Wi-Fi network as the PC.
+
 7. Configure ROS Mobile
    - Click on "Add Configuration" and add three button widgets and one logger widget. The buttons should publish to topics named "btn_high", "btn_medium" and "btn_low". The logger should be subscribed to a topic named "log".
    - In the MASTER tab, Enter your IP address from step 1 into the Master URL field.
@@ -32,7 +33,8 @@ $ source devel/setup.bash
 $ roslaunch ebms_with_serial ebmsWithSerial.launch
 ```
 This will start rosserial, the action client and the action server.
-2. In ROS Mobile, click on a button.
+
+2. In ROS Mobile, click on a button.<br />
 This will start the appropriate action. You can monitor its progress in the logger field.
 
 
@@ -46,7 +48,8 @@ $ roscore
 ```
 $ rosrun rosserial_python serial_node.py /dev/ttyACM0
 ```
-You can find the correct serial port by opening the Arduino IDE Tools/Port: "..."
+You can find the correct serial port by opening the Arduino IDE Tools/Port: "..." 
+
 3. Start the Action Client
 ```
 $ source devel/setup.bash
@@ -63,23 +66,22 @@ $ rosrun ebms_with_serial ebmsActionServer
 $ ifconfig
 ```
 7. Open the VIZ tab and press one of the three buttons.
-Pressing any button will send a message to the action client. The action client will send a goal to the Action Server. The Action Server will send the new wanted seat height to the Arduino Uno microcontroller. The microcontroller will begin moving the seat and sending feedback of the current position to the Action Server. The Action server will forward this feedback information to the Action Client. The Action Client will use this information to determine when the microcontroller is ready to service a new goal.
+Pressing any button will send a message to the action client. The action client will send a goal to the Action Server. The Action Server will send the new wanted seat height to the Arduino Uno microcontroller. The microcontroller will begin moving the seat and sending feedback of the current position to the Action Server. The Action server will forward this feedback information to the Action Client. The Action Client will use this information to determine when the microcontroller is ready to service a new goal. Until then any new button presses will be ignored. More specifically, if the seat height is being adjusted, or it is in a cooldown period, button presses will be ignored. 
 
 ## Useful Links:
-https://programmer.group/ros-communication-mechanism-action-and-action-file.html - for action client-server communication with callbacks
-https://wiki.ros.org/actionlib/DetailedDescription - for action server goal states and transitions
-http://wiki.ros.org/roscpp/Overview/Time - for ROS Time and Duration variables
-https://github.com/ROS-Mobile/ROS-Mobile-Android/wiki/FAQ - for ROS Mobile logger subscribing to a ROS topic
-http://wiki.ros.org/ROS/Tutorials/UsingRqtconsoleRoslaunch#Using_roslaunch - for roslaunch
-    http://wiki.ros.org/roslaunch/XML - for roslaunch
-    https://nu-msr.github.io/me495_site/lecture04_launch.html - for roslaunch
-    http://wiki.ros.org/roslaunch/XML/env - for roslaunch setting environment variables
-http://wiki.ros.org/ROS/EnvironmentVariables#Node_Environment_Variables - for ROS environment variables
-http://wiki.ros.org/rosserial_python - for rosserial port parameter name
-http://vitaly_filatov.tripod.com/ng/tc/tc_000.305.html - for converting unsigned long to string for the arduino
+https://programmer.group/ros-communication-mechanism-action-and-action-file.html - for action client-server communication with callbacks<br />
+https://wiki.ros.org/actionlib/DetailedDescription - for action server goal states and transitions<br />
+http://wiki.ros.org/roscpp/Overview/Time - for ROS Time and Duration variables<br />
+https://github.com/ROS-Mobile/ROS-Mobile-Android/wiki/FAQ - for ROS Mobile logger subscribing to a ROS topic<br />
+http://wiki.ros.org/ROS/Tutorials/UsingRqtconsoleRoslaunch#Using_roslaunch - for roslaunch<br />
+    http://wiki.ros.org/roslaunch/XML - for roslaunch<br />
+    https://nu-msr.github.io/me495_site/lecture04_launch.html - for roslaunch<br />
+    http://wiki.ros.org/roslaunch/XML/env - for roslaunch setting environment variables<br />
+http://wiki.ros.org/ROS/EnvironmentVariables#Node_Environment_Variables - for ROS environment variables<br />
+http://wiki.ros.org/rosserial_python - for rosserial port parameter name<br />
+http://vitaly_filatov.tripod.com/ng/tc/tc_000.305.html - for converting unsigned long to string for the arduino<br />
+
 It turns out that setPreempted is a relatively new method because it is not mentioned in the above wiki article. Instead a setCancelled() method is mentioned which can be found in simple_action_server_imp.h. Apparently setPreempted(result, text) calls "current_goal_.setCanceled(result, text);". Both methods accept two OPTIONAL parameters which are sent to any clients of the goal: a result and a text message. If no parameters are specified, some initialized values are used. For example my action's result has a u_int8_t value. If I don't pass my result to the setPreempted() method, it initializes its own result with a value of 0. What's more, setPreempted() as well as setSucceeded() not only set the state of the goal, they also publish the result and if you have not passed your result to the method like setPreempted(result), or setSucceeded(result), some other initialized by ROS result will be published. In my case, calling setPreempted() or setSucceeded() will also publish a result with value 0.  If you're not aware of that it can break your code's logic.
-With that in mind, if we want to cancel the currently active goal from the Action Client, we can use the method actionClientPtr->cancelGoal();. When this method is called from the Action Client, it can be detected from the Action Server using the method actionServer.isPreemptRequested() which will return true. Then it is the server's responsibility to set the status of the goal to PREEMPTED using the method "actionServer.setPreempted(result);" as well as publish the appropriate result. 
+With that in mind, if we want to cancel the currently active goal from the Action Client, we can use the method actionClientPtr->cancelGoal();. When this method is called from the Action Client, it can be detected from the Action Server using the method actionServer.isPreemptRequested() which will return true. Then it is the server's responsibility to set the status of the goal to PREEMPTED using the method "actionServer.setPreempted(result);" as well as publish the appropriate result.
 
-In the current state of the project, when an action has started it will run until it finishes or the timer runs out. The only case in which an action is cancelled is when the timer of the Action Client runs out. New action requests can not preempt a previus action. If the user tries to send a new goal before the previus one has finished, their request will be ignored and they will be notified of that in real time. 
-
-Todo:
+In the current state of the project, when an action has started it will run until it finishes or the timer runs out. The only case in which an action is cancelled is when the timer of the Action Client runs out. New action requests can not preempt a previus action. If the user tries to send a new goal before the previus one has finished, their request will be ignored and they will be notified of that in real time.
