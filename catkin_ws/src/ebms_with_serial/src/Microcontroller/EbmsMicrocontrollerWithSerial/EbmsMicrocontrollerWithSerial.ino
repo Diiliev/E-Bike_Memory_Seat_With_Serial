@@ -5,7 +5,7 @@
 #define MOTOR_B 6
 #define FEEDBACK A0
 #define MAX_WORK_TIME 60000
-#define STALL_TIME 5000 // In theory this should be 26ms but in reality the time it takes to move the actuator with 1mm is ~135ms.
+#define STALL_TIME 400 // In theory this should be 26ms but in reality the time it takes to move the actuator with 1mm is ~135ms.
 #define STALLED_CODE 255
 #define RESTING_CODE 254
 #define DONE_CODE 253
