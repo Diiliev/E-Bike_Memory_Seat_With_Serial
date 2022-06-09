@@ -17,6 +17,8 @@
 #define HIGH 140
 #define MEDIUM 70
 #define LOW 10
+#define RAISE 251
+#define LOWER 250
 
 typedef actionlib::SimpleActionClient<ebms_with_serial::adjustSeatHeightAction> Client;
 
@@ -113,6 +115,18 @@ void btnLowCallback(const std_msgs::Bool::ConstPtr& msg, const boost::shared_ptr
     sendGoalOnButtonPressed(msg->data, LOW, actionClientPtr);
 }
 
+void btnRaiseCallback(const std_msgs::Bool::ConstPtr& msg, const boost::shared_ptr<Client> &actionClientPtr)
+{
+    ROS_INFO("Button Raise is: [%d]", msg->data);
+    sendGoalOnButtonPressed(msg->data, RAISE, actionClientPtr);
+}
+
+void btnLowerCallback(const std_msgs::Bool::ConstPtr& msg, const boost::shared_ptr<Client> &actionClientPtr)
+{
+    ROS_INFO("Button Lower is: [%d]", msg->data);
+    sendGoalOnButtonPressed(msg->data, LOWER, actionClientPtr);
+}
+
 int main (int argc, char **argv)
 {
     ros::init(argc, argv, "ebmsRosClient");
@@ -135,6 +149,8 @@ int main (int argc, char **argv)
     ros::Subscriber btn_high_sub = rosNode.subscribe<std_msgs::Bool>("btn_high", 1000, boost::bind(btnHighCallback, _1, actionClientPtr));
     ros::Subscriber btn_medium_sub = rosNode.subscribe<std_msgs::Bool>("btn_medium", 1000, boost::bind(btnMediumCallback, _1, actionClientPtr));
     ros::Subscriber btn_low_sub = rosNode.subscribe<std_msgs::Bool>("btn_low", 1000, boost::bind(btnLowCallback, _1, actionClientPtr));
+    ros::Subscriber btn_raise_sub = rosNode.subscribe<std_msgs::Bool>("btn_raise", 1000, boost::bind(btnRaiseCallback, _1, actionClientPtr));
+    ros::Subscriber btn_lower_sub = rosNode.subscribe<std_msgs::Bool>("btn_lower", 1000, boost::bind(btnLowerCallback, _1, actionClientPtr));
 
     ros::spin();
 

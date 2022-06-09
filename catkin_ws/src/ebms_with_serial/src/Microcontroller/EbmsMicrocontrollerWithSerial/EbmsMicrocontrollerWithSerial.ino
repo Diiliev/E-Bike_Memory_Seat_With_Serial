@@ -10,6 +10,9 @@
 #define RESTING_CODE 254
 #define DONE_CODE 253
 #define CANCEL_CODE 252
+#define RAISE_CODE 251
+#define LOWER_CODE 250
+#define STOP_CODE 249
 #define ACTUATOR_STOP_TIME 100
 #define READ_FROM_ROS_TOPIC "newSeatHeight"
 #define SEND_TO_ROS_TOPIC "currentSeatHeight"
@@ -18,6 +21,7 @@
 #define COOLDOWN_TIME_MAX_DIGITS 6
 
 bool actionIsCancelled;
+bool actionIsStopped;
 
 ros::NodeHandle  nh;
 
@@ -33,14 +37,25 @@ void messageCb( const std_msgs::String& wantedHeight){
     actionIsCancelled = true;
     nh.loginfo("Cancelled.");
   } 
-  
-  // otherwise lower the flag and continue as usual
+
+  // if the user has released the raise/lower button, a STOP_CODE is sent.
+  // In this case stop the actuator immediatelly and raise the flag.
+  // This will exit any raising or lowering loop and lead to the resting function.
+  else if (goalHeight == STOP_CODE) {
+    stopTheActuator();
+    actionIsStopped = true;
+    nh.loginfo("Stopped.");
+  }
+
   else {
     actionIsCancelled = false;
+    actionIsStopped = false;
     byte currentHeight = getCurrentHeight();
     sendFeedback(currentHeight);
-  
+
     if (currentHeight == goalHeight) { stopTheActuator(); restTheActuator(0);}
+    else if (goalHeight == RAISE_CODE) raiseUntilStopped();
+    else if (goalHeight == LOWER_CODE) lowerUntilStopped();
     else if (currentHeight < goalHeight) raiseTheActuator(currentHeight, goalHeight, 0);
     else if (currentHeight > goalHeight) lowerTheActuator(currentHeight, goalHeight, 0);
   }
@@ -61,6 +76,7 @@ void setup() {
 
   nh.initNode();
   actionIsCancelled = false;
+  actionIsStopped = false;
   nh.subscribe(rosCommandsTopic);
   nh.advertise(feebackTopic);
   nh.advertise(cooldownTopic);
@@ -142,7 +158,7 @@ byte getCurrentHeight() {
  *  - stalled, timeout, resting, etc.
  *  
  *  -------------------------------------------------------------------------------------------------
- *  TODO find a way to combine raiseTheActuator and lowerTheActuator because it is waising memory
+ *  TODO find a way to combine raiseTheActuator and lowerTheActuator because it is waisting memory
  *  and it is annoying AND bad practice to Copy/Paste the same changes from one function to another.
  *  -------------------------------------------------------------------------------------------------
  */
@@ -200,10 +216,10 @@ void raiseTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
   // First condition is for Overshoot protection
   // Second condition is the successful case
   // Third condition is in case the actuator has stalled
-  if (currentHeight > goalHeight) {
+  if (currentHeight > goalHeight && !actionIsCancelled) {
     lowerTheActuator(currentHeight, goalHeight, workTime);
   }
-  else if(currentHeight == goalHeight){
+  else if(currentHeight == goalHeight && !actionIsCancelled){
     sendFeedback(currentHeight);
     nh.loginfo("Done!");
     restTheActuator(workTime);
@@ -318,10 +334,10 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
   // First condition is for Overshoot protection
   // Second condition is the successful case
   // Third condition is in case the actuator has stalled
-  if (currentHeight < goalHeight) {
+  if (currentHeight < goalHeight && !actionIsCancelled) {
     raiseTheActuator(currentHeight, goalHeight, workTime);
   }
-  else if(currentHeight == goalHeight){ 
+  else if(currentHeight == goalHeight && !actionIsCancelled){ 
     sendFeedback(currentHeight);
     nh.loginfo("Done!");
     restTheActuator(workTime);
@@ -330,6 +346,147 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
     sendFeedback(currentHeight);
     restTheActuator(workTime);
   }
+}
+
+
+/**
+ * When the user wants to raise the seat to an unspecified height, they
+ * will hold down the raise button until they are satisfied with the seat height. 
+ * When the button is pressed it publishes true, when released false.
+ * 
+ * The Action Client makes sure that only one request is being serviced at any given moment.
+ * Button presses while the actuator is moving, or while it is in cooldown will be ignored.
+ * 
+ * The Action Server publishes the special codes: 
+ * - RAISE_CODE when the raise button is pressed
+ * - LOWER_CODE when the lower button is pressed 
+ * - STOP_CODE when either button is released.
+ * 
+ * This function will raise the actuator until it receives STOP_CODE, until the actuator
+ * stalls or until the timeout is reached. 
+ */
+void raiseUntilStopped() {
+  nh.loginfo("Rаisе...");
+
+  byte currentHeight = getCurrentHeight();
+  byte currentHeightPreviousValue = currentHeight;
+  unsigned long startTime = millis(); // note the time we start raising the actuator
+  unsigned long stallTimer = millis() + STALL_TIME;
+
+  // begin raising the actuator
+  digitalWrite(MOTOR_F, HIGH);
+  digitalWrite(MOTOR_B, LOW);
+  
+  while (millis() < (startTime + MAX_WORK_TIME) && !actionIsCancelled && !actionIsStopped) {
+
+    // stall protection 
+    if (millis() > stallTimer) {
+      stopTheActuator();
+      sendFeedback(STALLED_CODE); //This feedback message will abort the ROS action.
+      nh.logwarn("Stalled!");
+      break;
+    }
+
+    currentHeight = getCurrentHeight();
+
+    // send feedback only if the current height has changed.
+    // Then reset currentHeightPreviousValue and the stall timer.
+    if (currentHeight > currentHeightPreviousValue) {
+      sendFeedback(currentHeight);
+      currentHeightPreviousValue = currentHeight;
+      stallTimer = millis() + STALL_TIME;
+    }
+
+    // we spin the node handler to ensure we don't lose synch with rosserial.
+    // and to receive new messages from the subscriber.
+    nh.spinOnce();
+    
+    // without this delay the function doesn't work.
+    // I suspect the while loop spins too fast for for the microcontroller to handle.
+    delay(10);
+  }
+
+  // Stop the actuator, wait for it to become completely still and get the final position
+  stopTheActuator();
+  delay(ACTUATOR_STOP_TIME);
+  currentHeight = getCurrentHeight();
+
+  // Calculate the time spent working by the actuator
+  unsigned long workTime = millis() - startTime;
+
+  sendFeedback(currentHeight);
+  nh.loginfo("Done!");
+  restTheActuator(workTime);
+}
+
+/**
+ * When the user wants to lower the seat to an unspecified height, they
+ * will hold down the lower button until they are satisfied with the seat height. 
+ * When the button is pressed it publishes true, when released false.
+ * 
+ * The Action Client makes sure that only one request is being serviced at any given moment.
+ * Button presses while the actuator is moving, or while it is in cooldown will be ignored.
+ * 
+ * The Action Server publishes the special codes: 
+ * - RAISE_CODE when the raise button is pressed
+ * - LOWER_CODE when the lower button is pressed 
+ * - STOP_CODE when either button is released.
+ * 
+ * This function will lower the actuator until it receives STOP_CODE, until the actuator
+ * stalls or until the timeout is reached. 
+ */
+void lowerUntilStopped() {
+  nh.loginfo("Lower...");
+
+  byte currentHeight = getCurrentHeight();
+  byte currentHeightPreviousValue = currentHeight;
+  unsigned long startTime = millis(); // note the time we start raising the actuator
+  unsigned long stallTimer = millis() + STALL_TIME;
+
+  // begin raising the actuator
+  digitalWrite(MOTOR_F, LOW);
+  digitalWrite(MOTOR_B, HIGH);
+  
+  while (millis() < (startTime + MAX_WORK_TIME) && !actionIsCancelled && !actionIsStopped) {
+
+    // stall protection 
+    if (millis() > stallTimer) {
+      stopTheActuator();
+      sendFeedback(STALLED_CODE); //This feedback message will abort the ROS action.
+      nh.logwarn("Stalled!");
+      break;
+    }
+
+    currentHeight = getCurrentHeight();
+
+    // send feedback only if the current height has changed.
+    // Then reset currentHeightPreviousValue and the stall timer.
+    if (currentHeight < currentHeightPreviousValue) {
+      sendFeedback(currentHeight);
+      currentHeightPreviousValue = currentHeight;
+      stallTimer = millis() + STALL_TIME;
+    }
+
+    // we spin the node handler to ensure we don't lose synch with rosserial.
+    // and to receive new messages from the subscriber.
+    nh.spinOnce();
+    
+    // without this delay the function doesn't work.
+    // I suspect the while loop spins too fast for for the microcontroller to handle.
+    delay(10);
+  }
+
+  // Stop the actuator, wait for it to become completely still and get the final position
+  stopTheActuator();
+  delay(ACTUATOR_STOP_TIME);
+  currentHeight = getCurrentHeight();
+
+  // Calculate the time spent working by the actuator
+  unsigned long workTime = millis() - startTime;
+
+  sendFeedback(currentHeight);
+  nh.loginfo("Done!");
+  restTheActuator(workTime);
 }
 
 
