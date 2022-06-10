@@ -5,14 +5,13 @@
 #define MOTOR_B 6
 #define FEEDBACK A0
 #define MAX_WORK_TIME 60000
-#define STALL_TIME 400 // In theory this should be 26ms but in reality the time it takes to move the actuator with 1mm is ~135ms.
+#define STALL_TIME 4000 // In theory this should be 26ms but in reality the time it takes to move the actuator with 1mm is ~135ms.
 #define STALLED_CODE 255
 #define RESTING_CODE 254
 #define DONE_CODE 253
 #define CANCEL_CODE 252
 #define RAISE_CODE 251
 #define LOWER_CODE 250
-#define STOP_CODE 249
 #define ACTUATOR_STOP_TIME 100
 #define READ_FROM_ROS_TOPIC "newSeatHeight"
 #define SEND_TO_ROS_TOPIC "currentSeatHeight"
@@ -21,7 +20,6 @@
 #define COOLDOWN_TIME_MAX_DIGITS 6
 
 bool actionIsCancelled;
-bool actionIsStopped;
 
 ros::NodeHandle  nh;
 
@@ -38,18 +36,8 @@ void messageCb( const std_msgs::String& wantedHeight){
     nh.loginfo("Cancelled.");
   } 
 
-  // if the user has released the raise/lower button, a STOP_CODE is sent.
-  // In this case stop the actuator immediatelly and raise the flag.
-  // This will exit any raising or lowering loop and lead to the resting function.
-  else if (goalHeight == STOP_CODE) {
-    stopTheActuator();
-    actionIsStopped = true;
-    nh.loginfo("Stopped.");
-  }
-
   else {
     actionIsCancelled = false;
-    actionIsStopped = false;
     byte currentHeight = getCurrentHeight();
     sendFeedback(currentHeight);
 
@@ -76,7 +64,6 @@ void setup() {
 
   nh.initNode();
   actionIsCancelled = false;
-  actionIsStopped = false;
   nh.subscribe(rosCommandsTopic);
   nh.advertise(feebackTopic);
   nh.advertise(cooldownTopic);
@@ -360,7 +347,7 @@ void lowerTheActuator (byte currentHeight, byte goalHeight, unsigned long elapse
  * The Action Server publishes the special codes: 
  * - RAISE_CODE when the raise button is pressed
  * - LOWER_CODE when the lower button is pressed 
- * - STOP_CODE when either button is released.
+ * - CANCEL_CODE when either button is released.
  * 
  * This function will raise the actuator until it receives STOP_CODE, until the actuator
  * stalls or until the timeout is reached. 
@@ -377,7 +364,7 @@ void raiseUntilStopped() {
   digitalWrite(MOTOR_F, HIGH);
   digitalWrite(MOTOR_B, LOW);
   
-  while (millis() < (startTime + MAX_WORK_TIME) && !actionIsCancelled && !actionIsStopped) {
+  while (millis() < (startTime + MAX_WORK_TIME) && !actionIsCancelled) {
 
     // stall protection 
     if (millis() > stallTimer) {
@@ -430,7 +417,7 @@ void raiseUntilStopped() {
  * The Action Server publishes the special codes: 
  * - RAISE_CODE when the raise button is pressed
  * - LOWER_CODE when the lower button is pressed 
- * - STOP_CODE when either button is released.
+ * - CANCEL_CODE when either button is released.
  * 
  * This function will lower the actuator until it receives STOP_CODE, until the actuator
  * stalls or until the timeout is reached. 
@@ -447,7 +434,7 @@ void lowerUntilStopped() {
   digitalWrite(MOTOR_F, LOW);
   digitalWrite(MOTOR_B, HIGH);
   
-  while (millis() < (startTime + MAX_WORK_TIME) && !actionIsCancelled && !actionIsStopped) {
+  while (millis() < (startTime + MAX_WORK_TIME) && !actionIsCancelled) {
 
     // stall protection 
     if (millis() > stallTimer) {

@@ -15,6 +15,8 @@
 #define RESTING_CODE 254
 #define DONE_CODE 253
 #define CANCEL_CODE 252
+#define RAISE_CODE 251
+#define LOWER_CODE 250
 
 /* 
     It is impossible for the seat height to be above 150mm.
@@ -43,6 +45,7 @@
 
 #define MAX_SEAT_HEIGHT 150
 #define DIGITS_OF_MAX_SEAT_HEIGHT 3
+#define WAIT_FOR_RESPONSE 1 // this time duration is in seconds
 
 
 class SeatHeightAdjuster {
@@ -105,7 +108,6 @@ class SeatHeightAdjuster {
      * @param goal this contains the wanted seat height sent to the microcontroller.
      */
     void executeCB(const ebms_with_serial::adjustSeatHeightGoalConstPtr &goal) {
-        // ros::Rate rate(10);
 
         ROS_INFO("Executing %s, wanted height is %imm",
             actionName.c_str(),
@@ -134,9 +136,11 @@ class SeatHeightAdjuster {
                 ROS_WARN("The action was cancelled.");
                 publishFeedbackToMobile("The action was cancelled.");
                 cancelRequestSent = true;
-                // if we have cancelled the action but we are not in cooldown,
-                // then break the loop, because the microcontroller has been restarted
-                // and we won't receive DONE_CODE
+
+                // if we don't receive a cooldownTime response after cancelling the action,
+                // then break the loop, because the microcontroller has probably been restarted
+                // and it will not return DONE_CODE
+                ros::Duration(WAIT_FOR_RESPONSE).sleep();
                 if (cooldownTime == INITIAL_COOLDOWN_TIME_VALUE) {
                     break;
                 }
@@ -173,7 +177,10 @@ class SeatHeightAdjuster {
         if (result.finalHeight == goal->wantedHeight) {
             actionServer.setSucceeded(result, "Success"); 
             ROS_INFO("%s Succeeded :) the final height is: %dmm", actionName.c_str(), result.finalHeight);
-        } else actionServer.setPreempted(result);
+        } else {
+            actionServer.setPreempted(result);
+            ROS_INFO("%s was preempted. The final height is: %dmm", actionName.c_str(), result.finalHeight);
+        }
         
         // reset the feedback's current value and flags to be ready for the next action
         feedback.currentValue = INITIAL_VALUE;

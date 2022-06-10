@@ -19,6 +19,7 @@
 #define LOW 10
 #define RAISE 251
 #define LOWER 250
+#define INITIAL_WANTED_HEIGHT 0
 
 typedef actionlib::SimpleActionClient<ebms_with_serial::adjustSeatHeightAction> Client;
 
@@ -52,6 +53,20 @@ void feedbackCb(const ebms_with_serial::adjustSeatHeightFeedbackConstPtr &feedba
  * they publish false. Only send new goals to the action server,
  * if the last one is done executing.
  * 
+ * Note:
+ * When the action timer runs out, a cancel request is sent to the server,
+ * but the action will not be immediatelly cancelled. The server will wait
+ * for the cooldown period of the actuator before cancelling the action.
+ * The action will still be active, when the actuator has finished moving but
+ * is in cooldown. This means that from the moment the cancel request was sent
+ * until the moment the server actually cancelles the action, "cooldownTime"
+ * ammount of time must pass.
+ * 
+ * Sidenote:
+ * If we don't receive the remaining cooldown time from the microcontroller
+ * that means it has most likely restarted or something has gone wrong.
+ * In this case the action will be immediatelly cancelled by the server.
+ * 
  * @param btnPressed represents the state of the button. True means it was
  * pressed, false means it was released.
  * @param btnHeight the seat height corresponding to the pressed button.
@@ -79,6 +94,7 @@ void sendGoalOnButtonPressed(bool btnPressed, u_int8_t btnHeight, const boost::s
             ros::Duration timeLeft = endTime - ros::Time::now();
             actionlib::SimpleClientGoalState goalState = actionClientPtr->getState();
 
+            // send a cancel request to the server when the timer runs out
             if (timeLeft <= ros::Duration(0, 0)) {
                 ROS_WARN("Action did not finish before the time out. Cancelling...");
                 actionClientPtr->cancelGoal();
@@ -93,6 +109,77 @@ void sendGoalOnButtonPressed(bool btnPressed, u_int8_t btnHeight, const boost::s
         }
         
     } else if (btnPressed && !lastGoalState.isDone()) {
+        ROS_INFO("Action can not be executed now. The current goal is in %s state.",lastGoalState.toString().c_str());
+    }
+}
+
+/**
+ * @brief Send a goal request, to raise or lower the seat height, to the Action Server
+ * and reject new goals until the current one has finished executing.
+ * 
+ * - When the RAISE or LOWER button is pressed, the goal is sent to the Action Server
+ * and the action is in ACTIVE state. Other button presses and releases will be ignored.
+ * - When the RAISE or LOWER button is released we send a cancel request to the Server, but the
+ * action state will remain ACTIVE until the cooldown period of the actuator has elapsed.
+ * 
+ * Note:
+ * If we don't receive the remaining cooldown time from the microcontroller
+ * that means it has most likely restarted or something has gone wrong.
+ * In this case the action will be immediatelly cancelled by the server.
+ * 
+ * @param btnPressed represents the state of the button. True means it was
+ * pressed, false means it was released.
+ * @param btnDirection the numerical code corresponding to the direction of the pressed button.
+ * It can be one of two values defined above: RAISE or LOWER.
+ * @param actionClientPtr a pointer to the action client used to send
+ * the goal to the Action Server and track its state.
+ */
+void sendGoalOnButtonHold(bool btnPressed, u_int8_t btnDirection, const boost::shared_ptr<Client> &actionClientPtr) {
+    
+    actionlib::SimpleClientGoalState lastGoalState = actionClientPtr->getState();
+    ROS_INFO("lastGoalState = %s, isDone() = %d.",lastGoalState.toString().c_str(), lastGoalState.isDone());
+
+    // Initialise the goal's wanted height, so that we can differentiate what action is ACTIVE when the button is released. 
+    ebms_with_serial::adjustSeatHeightGoal goal;
+    goal.wantedHeight = INITIAL_WANTED_HEIGHT;
+
+    if (btnPressed && lastGoalState.isDone()) {
+
+        // send a goal to the action server
+        goal.wantedHeight = btnDirection;
+        ROS_INFO("Raise the seat. Sending a raise request to the server.");
+        actionClientPtr->sendGoal(goal, &doneCb, &activeCb, &feedbackCb);
+
+        // wait for the action to complete and reject all incomming requests until then
+        ros::Duration timerDuration(ACTION_TIMER);
+        ros::Time endTime = ros::Time::now() + timerDuration;
+        bool finishedBeforeTimeout = false;
+
+        while (ros::ok()) {
+            ros::Duration timeLeft = endTime - ros::Time::now();
+            actionlib::SimpleClientGoalState goalState = actionClientPtr->getState();
+
+            // send a cancel request to the server when the timer runs out
+            if (timeLeft <= ros::Duration(0, 0)) {
+                ROS_WARN("Action did not finish before the time out. Cancelling...");
+                actionClientPtr->cancelGoal();
+                break;
+            }
+            if (goalState.isDone()) {
+                ROS_INFO("Action finished in time with state: %s", goalState.toString().c_str());
+                break;
+            }
+
+            ros::spinOnce();
+        }
+        
+    } 
+    // if the raise button is released and the RAISE action is ACTIVE, send a cancel request to the server
+    else if (!btnPressed && !lastGoalState.isDone() && goal.wantedHeight == btnDirection) {
+        ROS_INFO("Stop raising the seat. Sending a cancel request to the server.");
+        actionClientPtr->cancelGoal();
+    }
+    else if (btnPressed && !lastGoalState.isDone()) {
         ROS_INFO("Action can not be executed now. The current goal is in %s state.",lastGoalState.toString().c_str());
     }
 }
@@ -118,13 +205,13 @@ void btnLowCallback(const std_msgs::Bool::ConstPtr& msg, const boost::shared_ptr
 void btnRaiseCallback(const std_msgs::Bool::ConstPtr& msg, const boost::shared_ptr<Client> &actionClientPtr)
 {
     ROS_INFO("Button Raise is: [%d]", msg->data);
-    sendGoalOnButtonPressed(msg->data, RAISE, actionClientPtr);
+    sendGoalOnButtonHold(msg->data, RAISE, actionClientPtr);
 }
 
 void btnLowerCallback(const std_msgs::Bool::ConstPtr& msg, const boost::shared_ptr<Client> &actionClientPtr)
 {
     ROS_INFO("Button Lower is: [%d]", msg->data);
-    sendGoalOnButtonPressed(msg->data, LOWER, actionClientPtr);
+    sendGoalOnButtonHold(msg->data, LOWER, actionClientPtr);
 }
 
 int main (int argc, char **argv)

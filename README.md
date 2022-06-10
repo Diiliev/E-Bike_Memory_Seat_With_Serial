@@ -42,6 +42,10 @@ This will start the appropriate action. You can monitor its progress in the logg
 This is very useful for debugging purposes because every terminal wondow has its own output. The terminal running the rosserial node outputs messages sent from the microcontroller. The terminals running the action server and client nodes, output their respective messages.
 1. Start the ROS master node
 ```
+$ export ROS_IP=192.168.43.45
+$ export ROS_MASTER_URI=http://192.168.43.45:11311
+$ export ROS_HOSTNAME=$ROS_IP
+
 $ roscore
 ```
 2. Start the rosserial communication between the Ubuntu machine and the arduino microcontroller (in a new terminal window)
@@ -53,15 +57,23 @@ You can find the correct serial port by opening the Arduino IDE Tools/Port: "...
 3. Start the Action Client
 ```
 $ source devel/setup.bash
+$ export ROS_IP=192.168.43.45
+$ export ROS_MASTER_URI=http://192.168.43.45:11311
+$ export ROS_HOSTNAME=$ROS_IP
+
 $ rosrun ebms_with_serial ebmsActionClient
 ```
 4. Start the Action Server
 ```
 $ source devel/setup.bash
+$ export ROS_IP=192.168.43.45
+$ export ROS_MASTER_URI=http://192.168.43.45:11311
+$ export ROS_HOSTNAME=$ROS_IP
+
 $ rosrun ebms_with_serial ebmsActionServer
 ```
 5. Open ROS Mobile on your android device, go to the MASTER tab
-6. Connect to the current IP address of ROS Master, you can find it with
+6. Connect to the current IP address of ROS Master. In this example it is 192.168.43.45 but you can find your own with
 ```
 $ ifconfig
 ```
@@ -85,3 +97,7 @@ It turns out that setPreempted is a relatively new method because it is not ment
 With that in mind, if we want to cancel the currently active goal from the Action Client, we can use the method actionClientPtr->cancelGoal();. When this method is called from the Action Client, it can be detected from the Action Server using the method actionServer.isPreemptRequested() which will return true. Then it is the server's responsibility to set the status of the goal to PREEMPTED using the method "actionServer.setPreempted(result);" as well as publish the appropriate result.
 
 In the current state of the project, when an action has started it will run until it finishes or the timer runs out. The only case in which an action is cancelled is when the timer of the Action Client runs out. New action requests can not preempt a previus action. If the user tries to send a new goal before the previus one has finished, their request will be ignored and they will be notified of that in real time.
+
+TODO:
+- Rename the action parameter wantedHeight, because not every value is a wanted seat height. This parameter has transformed into a coded request for the server. Values incl. and bellow 150 are wanted seat height in mm, values above that are special requests such as 251 = RAISE the seat until the button is released.
+- Rename other functions whose functionality has been modified beyond the description of their names.
