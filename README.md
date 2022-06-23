@@ -45,6 +45,8 @@ This is very useful for debugging purposes because every terminal wondow has its
 $ export ROS_IP=192.168.43.45
 $ export ROS_MASTER_URI=http://192.168.43.45:11311
 $ export ROS_HOSTNAME=$ROS_IP
+// or this for short
+$ export ROS_IP=192.168.43.45 && export ROS_MASTER_URI=http://192.168.43.45:11311 && export ROS_HOSTNAME=$ROS_IP
 
 $ roscore
 ```
@@ -57,9 +59,12 @@ You can find the correct serial port by opening the Arduino IDE Tools/Port: "...
 3. Start the Action Client
 ```
 $ source devel/setup.bash
+
 $ export ROS_IP=192.168.43.45
 $ export ROS_MASTER_URI=http://192.168.43.45:11311
 $ export ROS_HOSTNAME=$ROS_IP
+// or this for short
+$ export ROS_IP=192.168.43.45 && export ROS_MASTER_URI=http://192.168.43.45:11311 && export ROS_HOSTNAME=$ROS_IP
 
 $ rosrun ebms_with_serial ebmsActionClient
 ```
@@ -69,6 +74,8 @@ $ source devel/setup.bash
 $ export ROS_IP=192.168.43.45
 $ export ROS_MASTER_URI=http://192.168.43.45:11311
 $ export ROS_HOSTNAME=$ROS_IP
+// or this for short
+$ export ROS_IP=192.168.43.45 && export ROS_MASTER_URI=http://192.168.43.45:11311 && export ROS_HOSTNAME=$ROS_IP
 
 $ rosrun ebms_with_serial ebmsActionServer
 ```
@@ -95,6 +102,7 @@ http://vitaly_filatov.tripod.com/ng/tc/tc_000.305.html - for converting unsigned
 https://answers.ros.org/question/267948/how-to-add-parameters-to-a-subscriber-callback-function-given-that-it-is-also-an-action_client/ - for passing the action client as a shared pointer to the subscriber callback function<br />
 http://wiki.ros.org/roscpp/Overview/Publishers%20and%20Subscribers - for detailed ROS publisher and subscriber information<br />
 http://wiki.ros.org/actionlib_tutorials/Tutorials/Writing%20a%20Callback%20Based%20Simple%20Action%20Client - for example Action Client using classes<br />
+http://wiki.ros.org/roscpp_tutorials/Tutorials/UsingClassMethodsAsCallbacks - for using class methods as callbacks<br />
 
 It turns out that setPreempted is a relatively new method because it is not mentioned in the above wiki article. Instead a setCancelled() method is mentioned which can be found in simple_action_server_imp.h. Apparently setPreempted(result, text) calls "current_goal_.setCanceled(result, text);". Both methods accept two OPTIONAL parameters which are sent to any clients of the goal: a result and a text message. If no parameters are specified, some initialized values are used. For example my action's result has a u_int8_t value. If I don't pass my result to the setPreempted() method, it initializes its own result with a value of 0. What's more, setPreempted() as well as setSucceeded() not only set the state of the goal, they also publish the result and if you have not passed your result to the method like setPreempted(result), or setSucceeded(result), some other initialized by ROS result will be published. In my case, calling setPreempted() or setSucceeded() will also publish a result with value 0.  If you're not aware of that it can break your code's logic.
 With that in mind, if we want to cancel the currently active goal from the Action Client, we can use the method actionClientPtr->cancelGoal();. When this method is called from the Action Client, it can be detected from the Action Server using the method actionServer.isPreemptRequested() which will return true. Then it is the server's responsibility to set the status of the goal to PREEMPTED using the method "actionServer.setPreempted(result);" as well as publish the appropriate result.
