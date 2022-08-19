@@ -489,20 +489,9 @@ void stopTheActuator() {
 /**
  * Calculate the appropriate ammount of rest time from the given work time.
  * Given that the duty cycle of the actuator is 25%, that means it must rest for
- * 4 times the ammount of time spent working.
+ * 3 times the ammount of time spent working, because dc = workTime/(workTime+restTime).
  * Stop the execution of the program for "restTime" ammount of time
  * and print "restTime" to the Serial monitor for debugging purposes.
- * 
- * TODO replace this with a function which checks for incoming messages and
- *      returns the current height with status 'C' for cooldown. 
- *      Next version of this function should also return the time left to rest
- * 
- * TODO send feedback to ROS when resting is complete.
- * 
- * TODO send the time it will take to rest to the ROS Action Server so it can
- * notify the Client.
- * 
- * TODo log time left for resting on every spin
  * 
  * TODO new goals should be able to interrupt this resting period if the
  * duty cycle of the actuator allows for that to happen. For example 3 seconds
@@ -516,7 +505,7 @@ void restTheActuator(unsigned long workTime) {
   nh.loginfo("Resting...");
   sendFeedback(RESTING_CODE);
   
-  unsigned long cooldownTime = 4 * workTime;
+  unsigned long cooldownTime = 3 * workTime;
   unsigned long now = millis();
   unsigned long endTime = now + cooldownTime;
   

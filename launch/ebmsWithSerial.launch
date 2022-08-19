@@ -14,7 +14,7 @@
 
     <!-- Start the rosserial node to establish communication with the microcontroller -->
     <node name="mcu_serial_node" pkg="rosserial_python" type="serial_node.py" respawn="true" output="screen">
-        <param name="port" value="/dev/ttyACM0"/>
+        <param name="port" value="/dev/ttyUSB0"/>
     </node>
 
     <node name="action_server_node" pkg="ebms_with_serial" type="ebmsActionServer" respawn="true" output="screen"> </node>

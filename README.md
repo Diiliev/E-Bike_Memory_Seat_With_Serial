@@ -43,10 +43,10 @@ This is very useful for debugging purposes because every terminal wondow has its
 1. Start the ROS master node
 ```
 $ export ROS_IP=192.168.43.45
-$ export ROS_MASTER_URI=http://192.168.43.45:11311
+$ export ROS_MASTER_URI=http://$ROS_IP:11311
 $ export ROS_HOSTNAME=$ROS_IP
 // or this for short
-$ export ROS_IP=192.168.43.45 && export ROS_MASTER_URI=http://192.168.43.45:11311 && export ROS_HOSTNAME=$ROS_IP
+$ export ROS_IP=192.168.43.45 && export ROS_MASTER_URI=http://$ROS_IP:11311 && export ROS_HOSTNAME=$ROS_IP
 
 $ roscore
 ```
@@ -61,10 +61,10 @@ You can find the correct serial port by opening the Arduino IDE Tools/Port: "...
 $ source devel/setup.bash
 
 $ export ROS_IP=192.168.43.45
-$ export ROS_MASTER_URI=http://192.168.43.45:11311
+$ export ROS_MASTER_URI=http://$ROS_IP:11311
 $ export ROS_HOSTNAME=$ROS_IP
 // or this for short
-$ export ROS_IP=192.168.43.45 && export ROS_MASTER_URI=http://192.168.43.45:11311 && export ROS_HOSTNAME=$ROS_IP
+$ export ROS_IP=192.168.43.45 && export ROS_MASTER_URI=http://$ROS_IP:11311 && export ROS_HOSTNAME=$ROS_IP
 
 $ rosrun ebms_with_serial ebmsActionClient
 ```

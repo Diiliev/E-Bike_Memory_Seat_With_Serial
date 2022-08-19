@@ -268,7 +268,7 @@ int main (int argc, char **argv)
     ros::init(argc, argv, "ebmsRosClient");
 
     ClientListener listener;
-    ROS_INFO("Action server started.");
+    ROS_INFO("Action Client started.");
     ros::spin();
 
     return 0;
