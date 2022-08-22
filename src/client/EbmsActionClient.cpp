@@ -11,14 +11,26 @@
     We have rounded this number to compensate for different actuator speeds,
     depending on the load on the actuator, overshoot protection and communication
     delays. The seat adjustment action contains the seat adjustment period and the
-    resting period. No seat adjustment action should take longer than 115s.
+    resting period. The maximum seat adjustment period is 60s and the max resting
+    period is 180s, therefor no seat adjustment action should take longer than 240s.
+
+    The codes DIR_* correspond to the direction the seat should travel and are saved
+    in the directionCode variable. This variable allows us to differentiate between
+    a memory button action (HIGH/MEDIUM/LOW) and a manual action (RAISE/LOWER).
+    Checking if a button is pressed and if the action isDone() is not enough to
+    seperate these cases. When the directionCode variable equals DIR_RAISE and isDone()
+    returns false, that means that the user is holding down the RAISE button.
+    Likewise for the LOWER button. When the variable is 0 it means that another action
+    might currently be active which is not the manual RAISE/LOWER action.
+    In this case we ignore the state of btnPressed for the RAISE/LOWER buttons.
 */
-#define ACTION_TIMER 115.0
+#define ACTION_TIMER 240.0
 #define HIGH 140
 #define MEDIUM 70
 #define LOW 10
-#define RAISE 251
-#define LOWER 250
+#define DIR_RAISE 251
+#define DIR_LOWER 250
+#define DIR_RESET 0
 
 typedef actionlib::SimpleActionClient<ebms_with_serial::adjustSeatHeightAction> Client;
 
@@ -32,13 +44,13 @@ class ClientListener {
     ros::Subscriber btn_low_sub;
     ros::Subscriber btn_raise_sub;
     ros::Subscriber btn_lower_sub;
-    u_int8_t directionCode; // The code 251 means RAISE, 250 means LOWER and 0 is just the initial value
+    u_int8_t directionCode;
     
     public:
     ClientListener() : ebmsActionClient("ebmsRosNode", true)
     {
         // initialize the direction code
-        directionCode = 0;
+        directionCode = DIR_RESET;
 
         // wait for the action server to start
         ROS_INFO("Waiting for action server to start.");
@@ -77,13 +89,13 @@ class ClientListener {
     void btnRaiseCallback(const std_msgs::Bool::ConstPtr& msg)
     {
         ROS_INFO("Button Raise is: [%d]", msg->data);
-        sendGoalOnButtonHold(msg->data, RAISE);
+        sendGoalOnButtonHold(msg->data, DIR_RAISE);
     }
 
     void btnLowerCallback(const std_msgs::Bool::ConstPtr& msg)
     {
         ROS_INFO("Button Lower is: [%d]", msg->data);
-        sendGoalOnButtonHold(msg->data, LOWER);
+        sendGoalOnButtonHold(msg->data, DIR_LOWER);
     }
     
 
@@ -150,6 +162,7 @@ class ClientListener {
                 }
                 if (goalState.isDone()) {
                     ROS_INFO("Action finished in time with state: %s", goalState.toString().c_str());
+                    ROS_INFO("-------------------------------------------------\n\n\n"); // print three empty lines to seperate each action log
                     break;
                 }
 
@@ -186,7 +199,7 @@ class ClientListener {
         
         actionlib::SimpleClientGoalState lastGoalState = ebmsActionClient.getState();
         ROS_INFO("lastGoalState = %s, isDone() = %d.",lastGoalState.toString().c_str(), lastGoalState.isDone());
-        std::string directionStr = (btnDirection == RAISE) ? "Raising" : "Lowering";
+        std::string directionStr = (btnDirection == DIR_RAISE) ? "Raising" : "Lowering";
 
         if (btnPressed && lastGoalState.isDone()) {
             
@@ -217,10 +230,13 @@ class ClientListener {
                 if (timeLeft <= ros::Duration(0, 0)) {
                     ROS_WARN("Action did not finish before the time out. Cancelling...");
                     ebmsActionClient.cancelGoal();
+                    directionCode = DIR_RESET;
                     break;
                 }
                 if (goalState.isDone()) {
                     ROS_INFO("Action finished in time with state: %s", goalState.toString().c_str());
+                    ROS_INFO("-------------------------------------------------\n\n\n"); // print three empty lines to seperate each action log
+                    directionCode = DIR_RESET;
                     break;
                 }
 
@@ -228,14 +244,17 @@ class ClientListener {
             }
             
         } 
-        // Stop raising the seat when the button for the active action is released.
+        else if (btnPressed && !lastGoalState.isDone()) {
+            ROS_INFO("Action can not be executed now. The current goal is in %s state.",lastGoalState.toString().c_str());
+        }
+        // we ignore the case when (!btnPressed && lastGoalState.isDone())
+        
+        // Stop raising the seat when the button for the active RAISE/LOWER action is released.
         // Releasing the Raise button can only stop a raising action, and the same applies for the lowering action.
         else if (!btnPressed && !lastGoalState.isDone() && directionCode == btnDirection) {
             ROS_INFO("Stop %s the seat. Sending a cancel request to the server.", directionStr.c_str());
             ebmsActionClient.cancelGoal();
-        }
-        else if (btnPressed && !lastGoalState.isDone()) {
-            ROS_INFO("Action can not be executed now. The current goal is in %s state.",lastGoalState.toString().c_str());
+            directionCode = DIR_RESET;
         }
     }
 

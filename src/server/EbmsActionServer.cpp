@@ -189,6 +189,7 @@ class SeatHeightAdjuster {
         cancelRequestSent = false;
 
         ROS_INFO("Ready for a new action goal.");
+        ROS_INFO("----------------------------\n\n\n"); // print three new lines to seperate each action log
         publishFeedbackToMobile("Done! The final seat height is: ", result.finalHeight, "mm. The buttons are active!");
         
         return;
