@@ -1,3 +1,22 @@
+E-Bike Memory Seat allows you to adjust the seat height of your electric bicycle with just one press of a button on your smartphone. <br />
+
+## Trailer
+
+# Description
+E-Bike Memory Seat With Serial is a completely re-engineered version of the [E-Bike Memory Seat](https://github.com/Diiliev/E_Bike_Memory_Seat) project, developed in the research group [AuRa - Autonome Fahrräder](https://www.aura.ovgu.de/) at OVGU Magdeburg, Germany.<br />
+The name comes from the fact that EBMS With Serial uses serial communication between the ROS server and microcontroller instead of the previously used CAN (Controller Area Network), but that's not all. Here are some of the exciting new features of this project.<br />
+## Features
+- [x] Completely integrated into the autonomous shared e-bike AuRa, model Immerwahr.
+- [x] Wireless control of the seat using the [ROS Mobile](https://github.com/ROS-Mobile/ROS-Mobile-Android) Android application.
+- [x] Two buttons for manual seat height adjustment "Up" and "Down". Seat moves when the button is held down and stops when released.
+- [x] Three "memory" buttons for automatic seat height adjustment. Seat moves to a predefined position when the button is pressed.
+- [x] Powerful linear actuator capable of adjusting the height of the seat while the user is sitting on it. The range of motion is between 0mm and 150mm.
+
+## Poster
+[EBMS Poster](docs/images/EBMS-Poster.png)
+## Wiring Diagram
+[EBMS Wiring Diagram](docs/images/EBMS_Wiring_Diagram.png)
+# Getting Started
 ## First time setup instructions
 1. Setup the Arduino Uno microcontroller 
    - After connecting it to the PC, upload catkin_ws/src/ebms_with_serial/src/Microcontroller/EbmsMicrocontrollerWithSerial/EbmsMicrocontrollerWithSerial.ino
@@ -104,7 +123,7 @@ http://wiki.ros.org/roscpp/Overview/Publishers%20and%20Subscribers - for detaile
 http://wiki.ros.org/actionlib_tutorials/Tutorials/Writing%20a%20Callback%20Based%20Simple%20Action%20Client - for example Action Client using classes<br />
 http://wiki.ros.org/roscpp_tutorials/Tutorials/UsingClassMethodsAsCallbacks - for using class methods as callbacks<br />
 
-It turns out that setPreempted is a relatively new method because it is not mentioned in the above wiki article. Instead a setCancelled() method is mentioned which can be found in simple_action_server_imp.h. Apparently setPreempted(result, text) calls "current_goal_.setCanceled(result, text);". Both methods accept two OPTIONAL parameters which are sent to any clients of the goal: a result and a text message. If no parameters are specified, some initialized values are used. For example my action's result has a u_int8_t value. If I don't pass my result to the setPreempted() method, it initializes its own result with a value of 0. What's more, setPreempted() as well as setSucceeded() not only set the state of the goal, they also publish the result and if you have not passed your result to the method like setPreempted(result), or setSucceeded(result), some other initialized by ROS result will be published. In my case, calling setPreempted() or setSucceeded() will also publish a result with value 0.  If you're not aware of that it can break your code's logic.
+It turns out that setPreempted is, at the time of writing, a relatively new method because it is not mentioned in the above wiki article. Instead a setCancelled() method is mentioned which can be found in simple_action_server_imp.h. Apparently setPreempted(result, text) calls "current_goal_.setCanceled(result, text);". Both methods accept two OPTIONAL parameters which are sent to any clients of the goal: a result and a text message. If no parameters are specified, some initialized values are used. For example my action's result has a u_int8_t value. If I don't pass my result to the setPreempted() method, it initializes its own result with a value of 0. What's more, setPreempted() as well as setSucceeded() not only set the state of the goal, they also publish the result and if you have not passed your result to the method like setPreempted(result), or setSucceeded(result), some other initialized by ROS result will be published. In my case, calling setPreempted() or setSucceeded() will also publish a result with value 0.  If you're not aware of that it can break your code's logic.
 With that in mind, if we want to cancel the currently active goal from the Action Client, we can use the method actionClientPtr->cancelGoal();. When this method is called from the Action Client, it can be detected from the Action Server using the method actionServer.isPreemptRequested() which will return true. Then it is the server's responsibility to set the status of the goal to PREEMPTED using the method "actionServer.setPreempted(result);" as well as publish the appropriate result.
 
 In the current state of the project, when an action has started it will run until it finishes or the timer runs out. The only case in which an action is cancelled is when the timer of the Action Client runs out. New action requests can not preempt a previus action. If the user tries to send a new goal before the previus one has finished, their request will be ignored and they will be notified of that in real time.
@@ -112,3 +131,4 @@ In the current state of the project, when an action has started it will run unti
 TODO:
 - Rename the action parameter wantedHeight, because not every value is a wanted seat height. This parameter has transformed into a coded request for the server. Values incl. and bellow 150 are wanted seat height in mm, values above that are special requests such as 251 = RAISE the seat until the button is released.
 - Rename other functions whose functionality has been modified beyond the description of their names.
+- Implement a CANCEL function when using the memory buttons (those which correspond to the topics "btn_high", "btn_medium" and "btn_low"). Currently when one of these buttons is pressed, for example btn_high, the seat will be lifted to that height and there is no way to manually cancel this action.
