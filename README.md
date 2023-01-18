@@ -13,9 +13,9 @@ The name comes from the fact that EBMS With Serial uses serial communication bet
 - [x] Powerful linear actuator capable of adjusting the height of the seat while the user is sitting on it. The range of motion is between 0mm and 150mm.
 
 ## Poster
-[EBMS Poster](docs/images/EBMS-Poster.png)
+![EBMS Poster](docs/images/EBMS-Poster.png)
 ## Wiring Diagram
-[EBMS Wiring Diagram](docs/images/EBMS_Wiring_Diagram.png)
+![EBMS Wiring Diagram](docs/images/EBMS_Wiring_Diagram.png)
 # Getting Started
 ## First time setup instructions
 1. Setup the Arduino Uno microcontroller 
