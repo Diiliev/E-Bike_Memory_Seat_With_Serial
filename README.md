@@ -1,22 +1,29 @@
-E-Bike Memory Seat allows you to adjust the seat height of your electric bicycle with just one press of a button on your smartphone. <br />
+# Trailer
 
-## Trailer
+
+https://user-images.githubusercontent.com/36421079/213232874-de1638c7-7f68-48f7-a89f-e0de0422abc3.mp4
+
 
 # Description
-E-Bike Memory Seat With Serial is a completely re-engineered version of the [E-Bike Memory Seat](https://github.com/Diiliev/E_Bike_Memory_Seat) project, developed in the research group [AuRa - Autonome Fahrräder](https://www.aura.ovgu.de/) at OVGU Magdeburg, Germany.<br />
-The name comes from the fact that EBMS With Serial uses serial communication between the ROS server and microcontroller instead of the previously used CAN (Controller Area Network), but that's not all. Here are some of the exciting new features of this project.<br />
+E-Bike Memory Seat allows you to adjust the seat height of your electric bicycle with just one press of a button on your smartphone. It was developed in the research group [AuRa - Autonome Fahrräder](https://www.aura.ovgu.de/) at OVGU Magdeburg, Germany and was one of the main features of the shared, autonomous and electric concept bike AuRa Immerwahr.<br/><br/>
+The project is based on the Robot Operating System (ROS). The ROS server receives messages from the ROS Mobile application over Wi-Fi and sends the appropriate command to the microcontroller over RS-232. The Arduino Uno microcontroller drives the linear actuator and measures the current seat height which is then displayed on the ROS Mobile application.
 ## Features
-- [x] Completely integrated into the autonomous shared e-bike AuRa, model Immerwahr.
 - [x] Wireless control of the seat using the [ROS Mobile](https://github.com/ROS-Mobile/ROS-Mobile-Android) Android application.
 - [x] Two buttons for manual seat height adjustment "Up" and "Down". Seat moves when the button is held down and stops when released.
 - [x] Three "memory" buttons for automatic seat height adjustment. Seat moves to a predefined position when the button is pressed.
+- [x] Feedback on the current seat height is displayed in real time.
 - [x] Powerful linear actuator capable of adjusting the height of the seat while the user is sitting on it. The range of motion is between 0mm and 150mm.
+- [x] Concurrent operations are handled by the ROS Action Server and Client.
+- [x] Cooldown period after each operation to protect the actuator from overheating.
 
 ## Poster
 ![EBMS Poster](docs/images/EBMS-Poster.png)
+
+# Getting Started
+
 ## Wiring Diagram
 ![EBMS Wiring Diagram](docs/images/EBMS_Wiring_Diagram.png)
-# Getting Started
+
 ## First time setup instructions
 1. Setup the Arduino Uno microcontroller 
    - After connecting it to the PC, upload catkin_ws/src/ebms_with_serial/src/Microcontroller/EbmsMicrocontrollerWithSerial/EbmsMicrocontrollerWithSerial.ino
@@ -105,6 +112,8 @@ $ ifconfig
 ```
 7. Open the VIZ tab and press one of the three buttons.
 Pressing any button will send a message to the action client. The action client will send a goal to the Action Server. The Action Server will send the new wanted seat height to the Arduino Uno microcontroller. The microcontroller will begin moving the seat and sending feedback of the current position to the Action Server. The Action server will forward this feedback information to the Action Client. The Action Client will use this information to determine when the microcontroller is ready to service a new goal. Until then any new button presses will be ignored. More specifically, if the seat height is being adjusted, or it is in a cooldown period, button presses will be ignored. 
+
+# Gallery
 
 ## Useful Links:
 https://programmer.group/ros-communication-mechanism-action-and-action-file.html - for action client-server communication with callbacks<br />
