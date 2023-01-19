@@ -118,7 +118,8 @@ Pressing any button will send a message to the action client. The action client 
 ![EBMS Shield](docs/images/EBMS_Shield.jpg)
 
 ## EBMS Components Wiring Overview
-![EBMS Components Wiring Overview](docs/images/EBMS_Components_Wiring_overview.png)
+![EBMS Components Wiring Overview](docs/images/EBMS_Components_Wiring_Overview.png)
+
 ## Useful Links:
 https://programmer.group/ros-communication-mechanism-action-and-action-file.html - for action client-server communication with callbacks<br />
 https://wiki.ros.org/actionlib/DetailedDescription - for action server goal states and transitions<br />
