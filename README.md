@@ -17,7 +17,7 @@ The project is based on the Robot Operating System (ROS). The ROS server receive
 - [x] Cooldown period after each operation to protect the actuator from overheating.
 
 ## Poster
-![EBMS Poster](docs/images/EBMS-Poster.png)
+![EBMS Poster](docs/images/EBMS_Poster.png)
 
 # Getting Started
 
@@ -114,7 +114,11 @@ $ ifconfig
 Pressing any button will send a message to the action client. The action client will send a goal to the Action Server. The Action Server will send the new wanted seat height to the Arduino Uno microcontroller. The microcontroller will begin moving the seat and sending feedback of the current position to the Action Server. The Action server will forward this feedback information to the Action Client. The Action Client will use this information to determine when the microcontroller is ready to service a new goal. Until then any new button presses will be ignored. More specifically, if the seat height is being adjusted, or it is in a cooldown period, button presses will be ignored. 
 
 # Gallery
+## EBMS Shield
+![EBMS Shield](docs/images/EBMS_Shield.jpg)
 
+## EBMS Components Wiring Overview
+![EBMS Components Wiring Overview](docs/images/EBMS_Components_Wiring_overview.png)
 ## Useful Links:
 https://programmer.group/ros-communication-mechanism-action-and-action-file.html - for action client-server communication with callbacks<br />
 https://wiki.ros.org/actionlib/DetailedDescription - for action server goal states and transitions<br />
